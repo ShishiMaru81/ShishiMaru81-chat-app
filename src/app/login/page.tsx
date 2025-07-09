@@ -44,7 +44,7 @@ function Loginpage() {
                         Enter your email below to login to your account
                     </CardDescription>
                     <CardAction>
-                        <Button variant="link">Sign Up</Button>
+                        <Button variant="link" onClick={() => router.push("/register")}>Sign Up</Button>
                         <ThemeSwitch />
                     </CardAction>
                 </CardHeader>

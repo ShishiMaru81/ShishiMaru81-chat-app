@@ -1,23 +1,40 @@
+'use client'
 import { ListFilter, LogOut, MessageSquareDiff, Search, User } from "lucide-react";
 import { Input } from "../ui/input";
 import ThemeSwitch from "./theme-switch";
 import Conversation from "./conversation";
-import { conversations } from "@/dummy-data/db";
+//import { conversations } from "@/dummy-data/db";
+import { signOut } from "next-auth/react";
+import UserAvatar from "./UserAvatar";
+import { IConversation } from "@/models/Conversation";
+import UserListDialog from "./user-list-dialog";
+import { getConversations } from "@/lib/api";
+import { useEffect, useState } from "react";
+
+
 
 
 const LeftPanel = () => {
 
+    const [conversations, setConversations] = useState<IConversation[]>([]);
+
+    useEffect(() => {
+        getConversations().then(setConversations);
+    }, []);
+    //const conversations: IConversation[] = [];
+    // Example conversation, replace with actual data fetching logic
     return (
         <div className='w-1/4 border-gray-600 border-r'>
             <div className='sticky top-0 bg-left-panel z-10'>
                 {/* Header */}
                 <div className='flex justify-between bg-gray-primary p-3 items-center'>
-                    <User size={24} />
+                    {/* <User size={24} /> */}
+                    <UserAvatar />
 
                     <div className='flex items-center gap-3'>
-                        <MessageSquareDiff size={20} /> {/* TODO: This line will be replaced with <UserListDialog /> */}
+                        <UserListDialog />
                         <ThemeSwitch />
-                        <LogOut size={20} className='cursor-pointer' />
+                        <LogOut size={20} className='cursor-pointer' onClick={() => signOut({ callbackUrl: "/login" })} />
                     </div>
                 </div>
                 <div className='p-3 flex items-center'>
@@ -40,8 +57,8 @@ const LeftPanel = () => {
             {/* Chat List */}
             <div className='my-3 flex flex-col gap-0 max-h-[80%] overflow-auto'>
                 {/* Conversations will go here*/}
-                {conversations?.map((conversation) => (
-                    <Conversation key={conversation._id} conversation={conversation} />
+                {conversations.map((c) => (
+                    <Conversation key={String(c._id)} conversation={c} />
                 ))}
 
                 {conversations?.length === 0 && (
