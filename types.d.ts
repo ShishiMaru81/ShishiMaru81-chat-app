@@ -5,5 +5,9 @@ declare global {
         conn: Connection | null;
         promise: Promise<Connection> | null
     }
+    var upload_url: {
+        uploadUrl: string | null;
+    }
 }
+
 export { }
