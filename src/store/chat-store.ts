@@ -1,20 +1,19 @@
 import { create } from "zustand";
 import { IConversation } from "@/models/Conversation";
-import { IMessage } from "@/models/Message";
-
+import { IMessagePopulated } from "@/models/Message";
 interface ChatStore {
     selectedConversation: IConversation | null;
-    messages: IMessage[];
+    messages: IMessagePopulated[];
     hasMore: boolean;
     onlineUsers: string[];
     setSelectedConversation: (conversation: IConversation | null) => void;
     setHasMore: (val: boolean) => void;
-    setMessages: (msgs: IMessage[], appendToTop?: boolean) => void;
-    addMessage: (msg: IMessage) => void;
+    setMessages: (msgs: IMessagePopulated[], appendToTop?: boolean) => void;
+    addMessage: (msg: IMessagePopulated) => void;
     setOnlineUsers: (users: string[]) => void;
 }
 
-export const useConversationStore = create<ChatStore>((set, get) => ({
+export const useConversationStore = create<ChatStore>((set) => ({
     selectedConversation: null,
     messages: [],
     hasMore: true,
