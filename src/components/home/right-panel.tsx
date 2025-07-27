@@ -7,10 +7,8 @@ import ChatPlaceHolder from "@/components/home/chat-placeholder";
 import GroupMembersDialog from "./group-members-dialog";
 import { useConversationStore } from "@/store/chat-store";
 //import { useConversationId } from "@/hooks/useConversationId";
-import { useParams } from "next/navigation";
 
 const RightPanel = () => {
-    const params = useParams();
     const { selectedConversation, setSelectedConversation } = useConversationStore()
     if (!selectedConversation) return <ChatPlaceHolder />;
     // console.log(selectedConversation)
