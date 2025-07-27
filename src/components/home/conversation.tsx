@@ -8,8 +8,9 @@ import { IConversation } from "@/models/Conversation";
 import { getMe } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { IUser } from "@/models/User";
 const Conversation = ({ conversation }: { conversation: IConversation }) => {
-    const conversationImage = conversation.groupImage || conversation.image;
+    const conversationImage = conversation.image || conversation.image;
 
     const lastMessage = conversation.lastMessage;
     const lastMessageType = lastMessage?.messageType;
@@ -27,7 +28,7 @@ const Conversation = ({ conversation }: { conversation: IConversation }) => {
 
     const { setSelectedConversation, selectedConversation } = useConversationStore();
     const activeBgClass = selectedConversation?._id === conversation._id;
-    const [me, setMe] = useState<any>(null);
+    const [me, setMe] = useState<IUser | null>(null);
 
     useEffect(() => {
         getMe().then(setMe);
