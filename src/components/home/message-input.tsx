@@ -7,13 +7,14 @@ import { getMe } from "@/lib/api";
 //import { socket } from "@/lib/socketClient";
 import { useConversationStore } from "@/store/chat-store";
 import { socket } from "@/lib/socketClient";
+import { IUser } from "@/models/User";
 
 
 
 
 const MessageInput = () => {
     const [msgText, setMsgText] = useState("");
-    const [me, setMe] = useState<any>(null);
+    const [me, setMe] = useState<IUser | null>(null);
     const addMessage = useConversationStore(s => s.addMessage);
     const sel = useConversationStore(s => s.selectedConversation);
 

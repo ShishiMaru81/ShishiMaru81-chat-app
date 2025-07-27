@@ -54,7 +54,7 @@ const MessageContainer = () => {
         } finally {
             setLoading(false);
         }
-    }, [sel?._id, loading, setMessages, setHasMore]);
+    }, [sel?._id, setMessages, setHasMore]);
 
     //  Scroll to bottom on first load
     useEffect(() => {
