@@ -1,14 +1,19 @@
 // src/models/Message.ts
 import mongoose, { Schema, Document, models } from "mongoose";
+import { IUser } from "./User";
 
 export interface IMessage extends Document {
     _id: mongoose.Types.ObjectId;
-    sender: mongoose.Types.ObjectId | any; // user ref
+    sender: mongoose.Types.ObjectId; // user ref
     content: string;
     messageType: "text" | "image" | "video";
     timestamp: Date;
     conversationId: mongoose.Types.ObjectId;
     createdAt: Date;
+}
+
+export interface IMessagePopulated extends Omit<IMessage, 'sender'> {
+    sender: IUser;
 }
 
 const MessageSchema = new Schema<IMessage>({
