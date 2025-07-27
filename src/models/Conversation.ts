@@ -19,9 +19,8 @@ export interface IConversation extends Document {
     isGroup: boolean;
     isOnline?: boolean; // handled by socket but used in UI
     name?: string;       // direct message name
-    image?: string;      // direct message image
+    image: string;      // direct message image
     groupName?: string;
-    groupImage?: string;
     lastMessage?: ILastMessage;
     createdAt: Date;     // alias as _creationTime
     updatedAt: Date;
@@ -36,7 +35,6 @@ const conversationSchema = new Schema<IConversation>({
     name: { type: String },         // direct name fallback
     image: { type: String },        // direct image fallback
     groupName: { type: String },
-    groupImage: { type: String },
     isOnline: { type: Boolean, default: false }, // not stored permanently, updated via socket
     lastMessage: {
         _id: { type: Schema.Types.ObjectId, ref: 'Message' },
