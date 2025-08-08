@@ -1,9 +1,6 @@
 # Chat App
 
 A real-time chat application built with Next.js, featuring group and direct messaging, user authentication, and live updates via WebSockets.
-
-![Chat App Screenshot](/public/desktop-hero.png)
-
 ## Features
 
 - Real-time messaging with Socket.IO
