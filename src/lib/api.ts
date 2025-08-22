@@ -49,4 +49,13 @@ export async function getConversationById(id: string) {
     if (!res.ok) throw new Error("Conversation fetch failed");
     return res.json();
 }
+export async function uppdateProfilePicture(imageUrl: string) {
+    const res = await fetch("/api/updateImage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl }),
+    });
+    if (!res.ok) throw new Error("Failed to update profile picture");
+    return await res.json();
+}
 
