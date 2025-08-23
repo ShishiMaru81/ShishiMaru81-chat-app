@@ -36,3 +36,26 @@ export async function connectToDatabase() {
     }
     return cached.conn
 }
+// lib/db.ts (or wherever you keep DB helimport { connect } fropers)
+
+import { User } from "@/models/User";// Path to your user model
+
+export async function getUserFromDB(email: string) {
+    try {
+        await connectToDatabase(); // Ensure DB connection
+
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            throw new Error('User not found');
+        }
+
+        return {
+            name: user.username,
+            email: user.email,
+            image: user.profilePicture,
+        };
+    } catch (error) {
+        console.error('Error fetching user from DB:', error);
+    }
+}
