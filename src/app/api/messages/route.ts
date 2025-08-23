@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleCreateMessage } from "@/lib/controllers/message.controller";
-import { z } from "zod";
+import { CreateMessageSchema } from "@/lib/validators/ message.schema";
 import { getPaginatedMessages } from "@/lib/repositories/message.repo";
-
-const MessageSchema = z.object({
-    content: z.string().min(1),
-    conversationId: z.string(),
-    senderId: z.string(),
-});
 
 export async function POST(req: NextRequest) {
     try {
-        const parsed = MessageSchema.parse(await req.json());
+        const parsed = CreateMessageSchema.parse(await req.json());
 
         const message = await handleCreateMessage(parsed);
 
