@@ -1,26 +1,31 @@
-// components/UserAvatar.tsx
-"use client";
-
-import { User } from "lucide-react";
-import { useSession } from "next-auth/react";
+import { AppUser } from "@/types/user";
 import Image from "next/image";
-//import Image from "next/image";
 
-const UserAvatar = () => {
-    const { data: session, status } = useSession();
+interface UserAvatarProps {
+    user: AppUser;
+    size?: number;
+}
 
-    if (status === "loading") return null;
-    if (!session?.user) return null;
+const UserAvatar: React.FC<UserAvatarProps> = ({ user, size = 40 }) => {
+    const src = user.imageKitUrl || user.oauthImage || null;
+    const initials = user.name?.charAt(0).toUpperCase() || "U";
 
     return (
-        <div className="flex items-center gap-2">
-            {session.user.image ? <Image
-                src={session.user.image}
-                alt={session.user.name || "User Avatar"}
-                width={48}
-                height={48}
-                className="rounded-full"
-            /> : <User size={48} />}
+        <div
+            className="flex items-center justify-center rounded-full bg-gray-300 overflow-hidden"
+            style={{ width: size, height: size }}
+        >
+            {src ? (
+                <Image
+                    src={src}
+                    alt={user.name || "User"}
+                    width={size}
+                    height={size}
+                    className="object-cover rounded-full"
+                />
+            ) : (
+                <span className="text-white font-semibold">{initials}</span>
+            )}
         </div>
     );
 };
