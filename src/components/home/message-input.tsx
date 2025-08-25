@@ -1,5 +1,5 @@
 'use client';
-import { Laugh, Mic, Plus, Send } from "lucide-react";
+import { Laugh, Mic, Plus, Send, Image as ImageIcon } from "lucide-react";
 import { Input } from "../ui/input";
 import { useEffect, useState } from "react";
 import { Button } from "../ui/button";
@@ -8,6 +8,8 @@ import { getMe } from "@/lib/api";
 import { useConversationStore } from "@/store/chat-store";
 import { socket } from "@/lib/socketClient";
 import { IUser } from "@/models/User";
+import { ImageUpload } from "./ImageUpload";
+import toast from "react-hot-toast";
 
 
 
@@ -15,6 +17,7 @@ import { IUser } from "@/models/User";
 const MessageInput = () => {
     const [msgText, setMsgText] = useState("");
     const [me, setMe] = useState<IUser | null>(null);
+    const [showImageUpload, setShowImageUpload] = useState(false);
     const addMessage = useConversationStore(s => s.addMessage);
     const sel = useConversationStore(s => s.selectedConversation);
 
@@ -62,12 +65,49 @@ const MessageInput = () => {
 
     }
 
+    const handleImageUpload = async (result: { url?: string; fileId?: string }) => {
+        if (!result.url || !me || !sel) return;
+
+        try {
+            const res = await fetch("/api/messages", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    content: result.url,
+                    conversationId: sel._id,
+                    senderId: me._id,
+                    messageType: "image",
+                }),
+            });
+
+            if (!res.ok) throw new Error("Failed to send image message");
+
+            const message = await res.json();
+            addMessage(message);
+            socket.emit("message:send", message);
+            toast.success("Image sent successfully!");
+            setShowImageUpload(false);
+        } catch (err) {
+            console.error("Send image message failed:", err);
+            toast.error("Failed to send image");
+        }
+    }
+
     return (
-        <div className='bg-gray-primary p-2 flex gap-4 items-center'>
+        <div className='relative bg-gray-primary p-2 flex gap-4 items-center'>
             <div className='relative flex gap-2 ml-2'>
                 {/* EMOJI PICKER WILL GO HERE */}
                 <Laugh className='text-gray-600 dark:text-gray-400' />
                 <Plus className='text-gray-600 dark:text-gray-400' />
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowImageUpload(!showImageUpload)}
+                    className="text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                >
+                    <ImageIcon size={20} />
+                </Button>
             </div>
             <form className='w-full flex gap-3' onSubmit={handleSendMessage}>
                 <div className='flex-1'>
@@ -99,6 +139,29 @@ const MessageInput = () => {
                     )}
                 </div>
             </form>
+
+            {showImageUpload && (
+                <div className="absolute bottom-full left-0 mb-2 w-64 p-4 border rounded-xl bg-background shadow-xl">
+                    <div className="flex justify-between items-center mb-2">
+                        <h3 className="text-sm font-medium">Send Image</h3>
+                        <button
+                            onClick={() => setShowImageUpload(false)}
+                            className="text-muted-foreground hover:text-foreground"
+                            aria-label="Close upload panel"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                    <ImageUpload
+                        onSuccess={handleImageUpload}
+                        onProgress={(progress) => {
+                            if (progress === 100) {
+                                toast.success("Image uploaded successfully!");
+                            }
+                        }}
+                    />
+                </div>
+            )}
         </div>
     );
 };
