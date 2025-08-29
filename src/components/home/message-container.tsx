@@ -9,6 +9,12 @@ import ChatBubble from "./chat-bubble";
 import { getMe } from "@/lib/api";
 import ChatDaySeparator from "./ChatDaySeparator";
 
+
+interface ChatBubbleProps {
+    message: IMessagePopulated;
+    currentUserId: string;
+}
+
 const MessageContainer = () => {
     const sel = useConversationStore(s => s.selectedConversation);
     let lastDate: string | null = null;
@@ -111,7 +117,7 @@ const MessageContainer = () => {
         >
             <div className='mx-12 flex flex-col gap-3 h-full'>
                 <div ref={topRef} />
-                {messages.map((msg) => {
+                {me && messages.map((msg) => {
                     const msgDate = new Date(msg.timestamp);
                     const dayKey = msgDate.toDateString();
 
@@ -122,8 +128,9 @@ const MessageContainer = () => {
                         <div key={String(msg._id)}>
                             {showSeparator && <ChatDaySeparator date={msgDate} />}
                             <ChatBubble
+                                key={String(msg._id)}
                                 message={msg}
-                                isSender={msg.sender._id === me?._id}
+                                currentUserId={me?._id?.toString()}
                             />
                         </div>
                     );
