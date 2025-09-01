@@ -75,7 +75,7 @@ src/
 │   ├── api.ts            # API client functions
 │   ├── auth.ts           # Authentication configuration
 │   ├── db.ts             # Database connection
-│   └── utils.ts          # Utility functions
+│   └── utils.ts          # Utility functions  
 ├── models/               # MongoDB Models
 │   ├── User.ts           # User model
 │   ├── Message.ts        # Message model

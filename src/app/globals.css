@@ -1,47 +1,60 @@
 @import "tailwindcss";
 
 :root {
-  --background: 48 8% 88%;
-  --foreground: 222.2 84% 4.9%;
+  --background: 0 0% 100%;
+  /* pure white */
+  --foreground: 220 15% 10%;
+  /* soft black text */
 
-  --container: 0 0 100%;
-  --left-panel: 100 100% 100%;
-  --gray-primary: 216 20% 95%;
-  --gray-secondary: 216 20% 95%;
-  --chat-hover: 180 5% 96%;
+  --container: 0 0% 100%;
+  /* panels blend in with white */
+  --left-panel: 0 0% 100%;
+  --gray-primary: 220 10% 92%;
+  /* --gray-chat: #f3f4f6; */
+  /* very light gray */
+  --gray-secondary: 220 8% 96%;
+  --chat-hover: 210 20% 98%;
+  /* almost white with tiny blue tint */
 
   --green-primary: 167 100% 33%;
-  --green-chat: 111 91% 91%;
+  --green-chat: 160 60% 96%;
+  /* light pastel green bubble */
 
   --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
+  /* white cards */
+  --card-foreground: 220 15% 10%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
+  --popover-foreground: 220 15% 10%;
 
-  --primary: 222.2 47.4% 11.2%;
-  --primary-foreground: 210 40% 98%;
+  --primary: 220 70% 45%;
+  /* bright blue for accents */
+  --primary-foreground: 0 0% 100%;
 
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 210 20% 98%;
+  /* faint gray background */
+  --secondary-foreground: 220 15% 10%;
 
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
+  --muted: 210 20% 98%;
+  --muted-foreground: 220 10% 40%;
 
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222.2 47.4% 11.2%;
+  --accent: 210 15% 97%;
+  /* off-white accent */
+  --accent-foreground: 220 15% 10%;
 
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 0 75% 50%;
+  --destructive-foreground: 0 0% 100%;
 
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 222.2 84% 4.9%;
+  --border: 220 12% 95%;
+  /* ultra light borders */
+  --input: 220 12% 95%;
+  --ring: 220 70% 45%;
 
   --radius: 0.5rem;
 }
 
 .dark {
+  --gray-chat: 220, 14%, 96%;
   --background: 202 31% 7%;
   --foreground: 210 40% 98%;
 
