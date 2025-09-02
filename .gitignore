@@ -39,4 +39,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-dist/socket.js
+#dist/socket.js
