@@ -58,11 +58,11 @@ export async function uppdateProfilePicture(imageUrl: string) {
     if (!res.ok) throw new Error("Failed to update profile picture");
     return await res.json();
 }
-export async function toggleBan(id: string) {
+export async function toggleBan(id: string, status: string) {
     const res = await fetch(`/api/admin/toggleban`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
+        body: JSON.stringify({ id, status }),
     });
     if (!res.ok) throw new Error("Failed to toggle ban");
     return await res.json();
