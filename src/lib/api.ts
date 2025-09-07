@@ -58,4 +58,22 @@ export async function uppdateProfilePicture(imageUrl: string) {
     if (!res.ok) throw new Error("Failed to update profile picture");
     return await res.json();
 }
+export async function toggleBan(id: string) {
+    const res = await fetch(`/api/admin/toggleban`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+    });
+    if (!res.ok) throw new Error("Failed to toggle ban");
+    return await res.json();
+}
+export async function changePermission(id: string, role: string) {
+    const res = await fetch(`/api/admin/changeRoal`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, role }),
+    });
+    if (!res.ok) throw new Error("Failed to change role");
+    return await res.json();
+}
 
