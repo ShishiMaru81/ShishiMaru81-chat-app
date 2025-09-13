@@ -1,6 +1,5 @@
 // lib/api.ts
 //import axios from "axios";
-
 // Client-side call to fetch user info from your API
 export async function getMe() {
     const res = await fetch("/api/me");
