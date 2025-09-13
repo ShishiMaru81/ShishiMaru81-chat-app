@@ -85,9 +85,7 @@ const MessageContainer = () => {
 
     //  Initial load
     useEffect(() => {
-        if (!loading) {
-            fetchMessages();
-        }
+        fetchMessages();
     }, [sel?._id, fetchMessages]);
 
     //  Socket join and message listener
