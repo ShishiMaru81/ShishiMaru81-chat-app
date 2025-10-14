@@ -11,14 +11,15 @@ export async function POST(req: Request) {
         if (existingUser) {
             return new Response(JSON.stringify({ error: "User already exists" }), { status: 400 });
         }
-        const hashedpassword = await bcrypt.hash(password, 10);
-        const user = await User.create({
-            username,
-            email,
-            password: hashedpassword,
-        })
+        // const hashedpassword = await bcrypt.hash(password, 10);
+        // const user = await User.create({
+        //     username,
+        //     email,
+        //     password: hashedpassword,
+        // })
 
-        return new Response(JSON.stringify(user), { status: 201 });
+
+        return new Response(JSON.stringify({ message: "OTP sent successfully" }), { status: 200 });
     } catch (error) {
         console.error("Error registering user:", error);
         return new Response(JSON.stringify({ error: "Internal Server Error" }), { status: 500 });
