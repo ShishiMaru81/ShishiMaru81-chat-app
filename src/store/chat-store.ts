@@ -1,11 +1,13 @@
 import { create } from "zustand";
 import { IConversation } from "@/models/Conversation";
 import { IMessage, IMessagePopulated } from "@/models/Message";
+import { ITempMessage } from "@/models/TempMessage";  // or wherever you define it
+
 
 interface ChatStore {
     selectedConversation: IConversation | null;
     conversations: (IConversation & { unreadCount?: number })[]; // added unreadCount
-    messages: IMessagePopulated[];
+    messages: (IMessagePopulated | ITempMessage)[];
     hasMore: boolean;
     onlineUsers: string[];
 
@@ -18,7 +20,7 @@ interface ChatStore {
 
     // messages
     setMessages: (msgs: IMessagePopulated[], appendToTop?: boolean) => void;
-    addMessage: (msg: IMessage | IMessagePopulated) => void;
+    addMessage: (msg: IMessagePopulated | ITempMessage) => void;
     replaceTempMessage: (tempId: string, realMessage: IMessagePopulated) => void;
     clearTempMessages: () => void;
 
