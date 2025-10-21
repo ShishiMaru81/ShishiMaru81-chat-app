@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Laugh, Mic, Plus, Send, Image as ImageIcon } from "lucide-react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
@@ -13,9 +13,9 @@ import toast from "react-hot-toast";
 import { ITempMessage } from "@/models/TempMessage";
 
 // 🧠 Small debounce util
-function debounce<F extends (...args: any[]) => void>(fn: F, delay: number) {
+function debounce<T extends unknown[]>(fn: (...args: T) => void, delay: number) {
     let timeout: NodeJS.Timeout;
-    return (...args: Parameters<F>) => {
+    return (...args: T) => {
         clearTimeout(timeout);
         timeout = setTimeout(() => fn(...args), delay);
     };
@@ -57,7 +57,7 @@ const MessageInput = () => {
         [me]
     );
 
-    const debouncedTyping = useCallback(debounce(handleTyping, 300), [handleTyping]);
+    const debouncedTyping = useMemo(() => debounce(handleTyping, 300), [handleTyping]);
 
     // 📤 Send text message
     const handleSendMessage = async (e: React.FormEvent) => {
@@ -163,7 +163,7 @@ const MessageInput = () => {
                         onKeyDown={(e) => {
                             if (e.key === "Enter" && !e.shiftKey) {
                                 e.preventDefault();
-                                handleSendMessage(e as any);
+                                handleSendMessage(e);
                             }
                         }}
                     />
