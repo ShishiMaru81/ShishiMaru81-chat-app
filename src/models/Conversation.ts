@@ -51,5 +51,8 @@ const conversationSchema = new Schema<IConversation>({
     timestamps: true
 });
 
+export interface IConversationPopulated extends IConversation {
+    participants: IUser[];
+}
 
 export const Conversation = models.Conversation || model<IConversation>('Conversation', conversationSchema);

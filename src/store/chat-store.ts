@@ -1,13 +1,13 @@
 import { create } from "zustand";
-import { IConversation } from "@/models/Conversation";
-import { IMessage, IMessagePopulated } from "@/models/Message";
+import { IConversation, IConversationPopulated } from "@/models/Conversation";
+import { IMessagePopulated } from "@/models/Message";
 import { ITempMessage } from "@/models/TempMessage";  // or wherever you define it
 
-
+type MessageType = IMessagePopulated | ITempMessage;
 interface ChatStore {
-    selectedConversation: IConversation | null;
+    selectedConversation: IConversationPopulated | null;
     conversations: (IConversation & { unreadCount?: number })[]; // added unreadCount
-    messages: (IMessagePopulated | ITempMessage)[];
+    messages: MessageType[];
     hasMore: boolean;
     onlineUsers: string[];
 
@@ -20,13 +20,13 @@ interface ChatStore {
 
     // messages
     setMessages: (msgs: IMessagePopulated[], appendToTop?: boolean) => void;
-    addMessage: (msg: IMessagePopulated | ITempMessage) => void;
-    replaceTempMessage: (tempId: string, realMessage: IMessagePopulated) => void;
+    addMessage: (msg: MessageType) => void;
+    replaceTempMessage: (tempId: string, newMsg: IMessagePopulated) => void;
     clearTempMessages: () => void;
 
 
     // conversation helpers
-    updateLastMessage: (conversationId: string, message: IMessagePopulated) => void;
+    updateLastMessage: (conversationId: string, msg: MessageType) => void;
     incrementUnread: (conversationId: string) => void;
     clearUnread: (conversationId: string) => void;
 }
@@ -40,7 +40,7 @@ export const useConversationStore = create<ChatStore>((set, get) => ({
 
     setSelectedConversation: (conversation) =>
         set({
-            selectedConversation: conversation,
+            selectedConversation: conversation as IConversationPopulated,
             messages: [],
             hasMore: true,
             conversations: get().conversations.map((c) =>
