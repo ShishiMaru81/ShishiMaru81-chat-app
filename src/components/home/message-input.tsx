@@ -11,6 +11,9 @@ import { IUser } from "@/models/User";
 import { ImageUpload } from "./ImageUpload";
 import toast from "react-hot-toast";
 import { ITempMessage } from "@/models/TempMessage";
+import { v4 as uuidv4 } from 'uuid';
+import { useOfflineStore } from '@/store/offline-store';
+import { useNetworkStatus } from '@/lib/hooks/useNetworkStatus';
 
 // 🧠 Small debounce util
 function debounce<T extends unknown[]>(fn: (...args: T) => void, delay: number) {
@@ -60,6 +63,8 @@ const MessageInput = () => {
     const debouncedTyping = useMemo(() => debounce(handleTyping, 300), [handleTyping]);
 
     // 📤 Send text message
+    const isOnline = useNetworkStatus();
+    const { addToQueue } = useOfflineStore();
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!msgText.trim() || !me || !sel?._id) return;
@@ -72,7 +77,7 @@ const MessageInput = () => {
             content: msgText.trim(),
             messageType: "text",
             createdAt: new Date().toISOString(),
-            status: "pending",
+            status: isOnline ? "pending" : "queued",
             sender: me,
             timestamp: new Date().toISOString(),
         };
@@ -80,6 +85,11 @@ const MessageInput = () => {
         addMessage(tempMessage);
         updateLastMessage(tempMessage.conversationId, tempMessage);
         setMsgText("");
+        if (!isOnline || socket.disconnected) {
+            await addToQueue({ ...tempMessage, tempId: tempId });
+            toast("Message queued. Will send when online.");
+            return;
+        }
 
         try {
             const res = await fetch("/api/messages", {
