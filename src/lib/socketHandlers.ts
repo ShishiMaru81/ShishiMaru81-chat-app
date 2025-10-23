@@ -10,7 +10,7 @@ export function initSocketHandlers() {
         const messages = useOfflineStore.getState().offlineQueue;
 
         for (const msg of messages) {
-            socket.emit('sendMessage', msg, async (ack: any) => {
+            socket.emit('sendMessage', msg, async (ack: { success: boolean }) => {
                 if (ack?.success) {
                     await removeFromQueue(msg.tempId);
                     console.log('Resent successfully:', msg.tempId);
