@@ -1,10 +1,11 @@
 import { socket } from '@/lib/socketClient';
 import { useOfflineStore } from '@/store/offline-store';
-import { useConversationStore } from '@/store/chat-store';
+//import { useConversationStore } from '@/store/chat-store';
+//import { IMessagePopulated } from '@/models/Message';
 
 export async function setupOfflineResender() {
     const offlineStore = useOfflineStore.getState();
-    const chatStore = useConversationStore.getState();
+    //const chatStore = useConversationStore.getState();
 
     // Load any saved messages into memory
     await offlineStore.loadQueue();
@@ -25,15 +26,15 @@ export async function setupOfflineResender() {
         for (const msg of messages) {
             console.log('[Offline] Retrying message:', msg.tempId);
 
-            socket.emit('sendMessage', msg, async (ack: { success: boolean; serverMessage: any }) => {
-                if (ack?.success) {
-                    console.log('[Offline] Message resent successfully:', msg.tempId);
-                    await offlineStore.removeFromQueue(msg.tempId);
-                    chatStore.replaceTempMessage(msg.tempId, ack.serverMessage);
-                } else {
-                    console.warn('[Offline] Retry failed for:', msg.tempId);
-                }
-            });
+            // socket.emit('sendMessage', msg, async (ack: { success: boolean; serverMessage: { serverMessage: IMessagePopulated } }) => {
+            //     if (ack?.success) {
+            //         console.log('[Offline] Message resent successfully:', msg.tempId);
+            //         await offlineStore.removeFromQueue(msg.tempId);
+            //         chatStore.replaceTempMessage(msg.tempId, ack.serverMessage);
+            //     } else {
+            //         console.warn('[Offline] Retry failed for:', msg.tempId);
+            //     }
+            // });
         }
     });
 
