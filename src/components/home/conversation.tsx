@@ -15,7 +15,7 @@ const Conversation = ({ conversation }: { conversation: IConversationPopulated }
 
     // ✅ directly get other user info from populated data
     const otherUser = conversation.participants.find(
-        (user) => user._id.toString() !== currentUserEmail
+        (user) => user.email !== currentUserEmail
     );
 
     const conversationImage = conversation.image || otherUser?.profilePicture || "";
