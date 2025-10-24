@@ -7,6 +7,8 @@ import { connectToDatabase } from "./db";
 import { User } from "@/models/User";
 import { MongoDBAdapter } from "@next-auth/mongodb-adapter";
 import clientPromise from "./mongo";
+import { loginRateLimiter } from "./rateLimiter";
+import { headers } from "next/headers";
 
 
 export const authOptions: NextAuthOptions = {
@@ -19,6 +21,15 @@ export const authOptions: NextAuthOptions = {
                 password: { label: "Password", type: "password" },
             },
             async authorize(credentials) {
+                const ip = (await headers()).get("x-forwarded-for") || "unknown";
+
+                // Apply rate limit
+                const { success, } = await loginRateLimiter.limit(ip);
+                console.log(`Login attempt from IP ${ip}`);
+                if (!success) {
+                    console.warn(`Too many login attempts from IP ${ip}`);
+                    throw new Error("Too many login attempts. Please try again later.");
+                }
                 if (!credentials?.email || !credentials?.password) {
                     throw new Error("Missing email or password");
                 }
@@ -62,6 +73,7 @@ export const authOptions: NextAuthOptions = {
 
     callbacks: {
         async signIn({ user, account, profile }) {
+
             await connectToDatabase();
 
             if (account?.provider === "google") {
