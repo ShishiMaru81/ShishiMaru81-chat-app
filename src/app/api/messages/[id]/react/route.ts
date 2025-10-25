@@ -1,0 +1,35 @@
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { connectToDatabase } from "@/lib/db";
+import Message from "@/models/Message";
+
+export async function POST(req: Request, { params }: { params: { id: string } }) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    await connectToDatabase();
+    const { emoji } = await req.json();
+    const message = await Message.findById(params.id);
+    if (!message) return NextResponse.json({ error: "Message not found" }, { status: 404 });
+
+    const existingReaction = message.reactions.find((r: any) => r.emoji === emoji);
+    if (existingReaction) {
+        const userIndex = existingReaction.users.findIndex(
+            (u: string) => u.toString() === session.user.email
+        );
+        if (userIndex >= 0) {
+            existingReaction.users.splice(userIndex, 1); // remove reaction
+        } else {
+            existingReaction.users.push(session.user.email); // add reaction
+        }
+    } else {
+        message.reactions.push({ emoji, users: [session.user.email] });
+    }
+
+    await message.save();
+
+    // io.to(message.conversation.toString()).emit("message:reacted", message);
+
+    return NextResponse.json({ success: true, message });
+}
