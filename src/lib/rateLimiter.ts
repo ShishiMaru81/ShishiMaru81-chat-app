@@ -12,3 +12,13 @@ export const loginRateLimiter = new Ratelimit({
     limiter: Ratelimit.slidingWindow(5, "10 m"),
     analytics: true,
 });
+export const authRateLimiter = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(5, "10 m"), // 5 attempts per 10 minutes
+    prefix: "auth_limit",
+});
+export const messageRateLimiter = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(10, "1 m"), // 10 attempts per minute
+    prefix: "message_limit",
+});
