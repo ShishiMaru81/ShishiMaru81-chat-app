@@ -18,6 +18,13 @@ export interface IMessage extends Document {
     conversationId: mongoose.Types.ObjectId;
     createdAt: Date;
 }
+export interface MessageInputProps {
+    onSend: (content: string) => void;
+    replyTo?: IMessage;
+    onCancelReply?: () => void;
+    editMessage?: IMessage;
+    onCancelEdit?: () => void;
+}
 
 export interface IMessagePopulated extends Omit<IMessage, 'sender'> {
     sender: IUser;
