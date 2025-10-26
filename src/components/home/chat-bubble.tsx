@@ -1,51 +1,80 @@
-import { IMessagePopulated } from "@/models/Message";
+import { IMessage, IMessagePopulated } from "@/models/Message";
 import ChatBubbleAvatar from "./chat-bubble-avatar";
 import { useConversationStore } from "@/store/chat-store";
 import { Image } from "@imagekit/next";
 import { ITempMessage } from "@/models/TempMessage";
-//import { VideoIcon } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useState } from "react";
+import { Smile, MessageCircle, Edit, Trash2 } from "lucide-react";
+// Import ReactionBar if it exists:
+import { ReactionBar } from "../chat/reaction-bar";
+import { IUser } from "@/models/User";
 
-interface ChatBubbleProps {
-    message: IMessagePopulated | ITempMessage;
-    currentUserId: string; // ✅ pass only current user id
+function isUser(user: any): user is IUser {
+    return user && typeof user === 'object' && 'username' in user;
 }
 
-const ChatBubble = ({ message, currentUserId }: ChatBubbleProps) => {
-    const { selectedConversation } = useConversationStore();
+interface ChatBubbleProps {
+    message: IMessagePopulated | ITempMessage | IMessage;
+    currentUserId: string;
+    onEdit: (msg: IMessagePopulated | IMessage | ITempMessage) => void;
+    onDelete: (msg: IMessagePopulated | IMessage | ITempMessage) => void;
+    onReply: (msg: IMessagePopulated | IMessage | ITempMessage) => void;
+    onReact: (msg: IMessagePopulated | IMessage | ITempMessage, emoji: string) => void;
+}
 
-    // ✅ Works whether sender is populated object or just id string
-    const isSender =
-        (message.sender && typeof message.sender === "object" && "toString" in message.sender
-            ? message.sender._id?.toString() === currentUserId
-            : message.sender === currentUserId);
+const ChatBubble = ({
+    message,
+    currentUserId,
+    onEdit,
+    onDelete,
+    onReply,
+    onReact,
+}: ChatBubbleProps) => {
+    const { selectedConversation } = useConversationStore();
+    const [showReactions, setShowReactions] = useState(false);
+
+    function isUser(obj: any): obj is IUser {
+        return obj && typeof obj === 'object' && 'username' in obj;
+    }
+
+    const isMine =
+        typeof message.sender === "string"
+            ? message.sender === currentUserId
+            : isUser(message.sender) && message.sender._id?.toString() === currentUserId;
 
     return (
-        <div className={`flex ${isSender ? "justify-end" : "justify-start"} px-2`}>
-            {/* Show avatar only for other users in group chats */}
-            {!isSender && selectedConversation?.isGroup && (
+        <div className={`flex ${isMine ? "justify-end" : "justify-start"} px-2`}>
+            {/* Show avatar only for others in group chats */}
+            {!isMine && selectedConversation?.isGroup && isUser(message.sender) && (
                 <ChatBubbleAvatar
-                    isGroup={selectedConversation?.isGroup}
+                    isGroup={selectedConversation.isGroup}
                     isMember={true}
                     sender={message.sender}
                 />
             )}
 
-            <div className="flex flex-col items-end max-w-[70%]">
+            <div className="relative flex flex-col items-end max-w-[70%]">
                 <div
                     className={`w-full rounded-xl transition duration-300 ease-in-out
-            ${isSender
+                    ${isMine
                             ? "bg-gradient-to-br from-indigo-500 to-purple-600 text-white"
-                            : "bg-gray-100 text-gray-800"
-                        }
-            ${message.messageType !== "text"
+                            : "bg-gray-100 text-gray-800"}
+                    ${message.messageType !== "text"
                             ? "p-0 bg-transparent shadow-none"
-                            : "p-3 shadow-md"
-                        }
-          `}
+                            : "p-3 shadow-md"}
+                    `}
                 >
+                    {/* Replied Message Preview */}
+                    {message.repliedTo && (
+                        <div className="text-xs text-gray-400 border-l-2 pl-2 mb-1 border-gray-300 dark:border-gray-700">
+                            {/* Replying to: {message.repliedTo.content} */}
+                        </div>
+                    )}
+
                     {/* Message content */}
                     {message.messageType === "text" && (
-                        <p className="text-sm">{message.content}</p>
+                        <p className="text-sm break-words">{message.content}</p>
                     )}
 
                     {message.messageType === "image" && (
@@ -71,10 +100,48 @@ const ChatBubble = ({ message, currentUserId }: ChatBubbleProps) => {
                     )}
                 </div>
 
+                {/* Dropdown for message actions */}
+                {('isDeleted' in message ? !message.isDeleted : true) && (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button className="absolute -top-2 right-2 opacity-0 group-hover:opacity-100 transition">
+                                •••
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent side={isMine ? "left" : "right"}>
+                            <DropdownMenuItem onClick={() => setShowReactions(true)}>
+                                <Smile className="w-4 h-4 mr-2" /> React
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onReply(message)}>
+                                <MessageCircle className="w-4 h-4 mr-2" /> Reply
+                            </DropdownMenuItem>
+                            {isMine && (
+                                <>
+                                    <DropdownMenuItem onClick={() => onEdit(message)}>
+                                        <Edit className="w-4 h-4 mr-2" /> Edit
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => onDelete(message)}>
+                                        <Trash2 className="w-4 h-4 mr-2 text-red-500" /> Delete
+                                    </DropdownMenuItem>
+                                </>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )}
+
+                {/* Reaction Bar */}
+                {showReactions && (
+                    <ReactionBar
+                        onSelect={(emoji: string) => {
+                            onReact(message, emoji);
+                            setShowReactions(false);
+                        }}
+                    />
+                )}
+
                 {/* Timestamp */}
                 <span
-                    className={`text-[10px] text-gray-400 mt-1 block ${isSender ? "text-right" : "text-left"
-                        } w-full`}
+                    className={`text-[10px] text-gray-400 mt-1 block ${isMine ? "text-right" : "text-left"} w-full`}
                 >
                     {new Date(message.timestamp).toLocaleTimeString([], {
                         hour: "2-digit",
