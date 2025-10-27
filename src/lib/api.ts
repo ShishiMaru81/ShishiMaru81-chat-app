@@ -75,4 +75,36 @@ export async function changePermission(id: string, role: string) {
     if (!res.ok) throw new Error("Failed to change role");
     return await res.json();
 }
-
+export async function deleteConversation(id: string) {
+    const res = await fetch(`/api/conversations/${id}`, {
+        method: "DELETE",
+    });
+    if (!res.ok) throw new Error("Failed to delete conversation");
+    return await res.json();
+}
+export async function editMessage(id: string, content: string) {
+    const res = await fetch(`/api/messages/${id}/edit`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+    });
+    console.log(res);
+    if (!res.ok) throw new Error("Failed to edit message");
+    return await res.json();
+}
+export async function deleteMessage(id: string) {
+    const res = await fetch(`/api/messages/${id}/delete`, {
+        method: "DELETE",
+    });
+    if (!res.ok) throw new Error("Failed to delete message");
+    return await res.json();
+}
+export async function reactToMessage(id: string, emoji: string) {
+    const res = await fetch(`/api/messages/${id}/react`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emoji }),
+    });
+    if (!res.ok) throw new Error("Failed to react to message");
+    return await res.json();
+}
