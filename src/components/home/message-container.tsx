@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useConversationStore } from "@/store/chat-store";
 import { socket } from "@/lib/socketClient";
-import { IMessagePopulated } from "@/models/Message";
+import { IMessage, IMessagePopulated } from "@/models/Message";
 import ChatBubble from "./chat-bubble";
 import ChatDaySeparator from "./ChatDaySeparator";
 import { useUser } from "@/context/UserContext";
 import { ITempMessage } from "@/models/TempMessage";
+import { deleteMessage, editMessage, reactToMessage } from "@/lib/api";
 
 const MessageContainer = () => {
     const sel = useConversationStore(s => s.selectedConversation);
@@ -123,8 +124,12 @@ const MessageContainer = () => {
                         <div key={String(msg._id)}>
                             {showSeparator && <ChatDaySeparator date={msgDate} />}
                             <ChatBubble
-                                message={msg as IMessagePopulated | ITempMessage}
+                                message={msg as ITempMessage | IMessage}
                                 currentUserId={user?._id?.toString()}
+                                onEdit={() => editMessage}
+                                onDelete={deleteMessage}
+                                onReply={() => { }}
+                                onReact={() => reactToMessage}
                             />
                         </div>
                     );
