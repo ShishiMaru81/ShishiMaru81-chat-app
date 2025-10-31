@@ -2,6 +2,9 @@ import express from "express";
 import http from "http";
 import { Server, Socket } from "socket.io";
 import cors from "cors";
+import { createClient } from "redis";
+import { createAdapter } from "@socket.io/redis-adapter";
+
 
 // Extend Socket type to include custom properties
 interface CustomSocket extends Socket {
@@ -23,6 +26,12 @@ const io = new Server(server, {
 
 // ACTIVE USERS MAP
 const userConnections = new Map<string, number>();
+// const pubClient = createClient({ url: process.env.REDIS_URL });
+// const subClient = pubClient.duplicate();
+
+// await Promise.all([pubClient.connect(), subClient.connect()]);
+
+// io.adapter(createAdapter(pubClient, subClient));
 
 function addUser(userId: string) {
     const count = userConnections.get(userId) || 0;

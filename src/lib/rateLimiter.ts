@@ -22,3 +22,8 @@ export const messageRateLimiter = new Ratelimit({
     limiter: Ratelimit.slidingWindow(10, "1 m"), // 10 attempts per minute
     prefix: "message_limit",
 });
+export const uploadRateLimiter = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(5, "1 m"), // 5 attempts per minute
+    prefix: "upload_limit",
+})

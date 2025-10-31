@@ -77,6 +77,7 @@ const MessageInput = ({ onSend, replyTo, onCancelReply, editMessage, onCancelEdi
         const tempId = uuidv4();
         const tempMessage: ITempMessage = {
             _id: tempId,
+            isDeleted: false,
             conversationId: String(sel._id),
             senderId: String(me._id),
             content: msgText.trim(),

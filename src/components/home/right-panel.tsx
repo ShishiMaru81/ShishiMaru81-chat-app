@@ -6,13 +6,19 @@ import MessageContainer from "./message-container";
 import ChatPlaceHolder from "@/components/home/chat-placeholder";
 import GroupMembersDialog from "./group-members-dialog";
 import { useConversationStore } from "@/store/chat-store";
+import { useSession } from "next-auth/react";
 //import { useConversationId } from "@/hooks/useConversationId";
 
 const RightPanel = () => {
+    const { data: session } = useSession();
+    const currentUserEmail = session?.user?.email;
     const { selectedConversation, setSelectedConversation } = useConversationStore()
     if (!selectedConversation) return <ChatPlaceHolder />;
     //console.log(selectedConversation)
-    const conversationName = selectedConversation.groupName || selectedConversation.participants[0].username;
+    const otherUser = selectedConversation.participants.find(
+        (user) => user.email !== currentUserEmail
+    );
+    const conversationName = selectedConversation.groupName || otherUser?.username || "Unknown";
     return (
         <div className='w-3/4 flex flex-col'>
             <div className='w-full sticky top-0 z-50'>
@@ -20,7 +26,7 @@ const RightPanel = () => {
                 <div className='flex justify-between bg-gray-primary p-3'>
                     <div className='flex gap-3 items-center'>
                         <Avatar>
-                            <AvatarImage src={selectedConversation.image || selectedConversation.participants[0].profilePicture || "/placeholder.png"} className='object-cover' />
+                            <AvatarImage src={selectedConversation.image || otherUser?.profilePicture || "/placeholder.png"} className='object-cover' />
                             <AvatarFallback>
                                 <div className='animate-pulse bg-gray-tertiary w-full h-full rounded-full' />
                             </AvatarFallback>
