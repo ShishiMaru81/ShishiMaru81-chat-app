@@ -9,11 +9,12 @@ import { useConversationStore } from "@/store/chat-store";
 import { socket } from "@/lib/socketClient";
 import { IUser } from "@/models/User";
 import { ImageUpload } from "./ImageUpload";
-import toast from "react-hot-toast";
+import { toast } from "sonner"
 import { ITempMessage } from "@/models/TempMessage";
 import { v4 as uuidv4 } from 'uuid';
 import { useOfflineStore } from '@/store/offline-store';
 import { useNetworkStatus } from '@/lib/hooks/useNetworkStatus';
+import { useRateLimitHandler } from "@/lib/hooks/useRateLimitHandler";
 
 // 🧠 Small debounce util
 function debounce<T extends unknown[]>(fn: (...args: T) => void, delay: number) {
@@ -34,6 +35,9 @@ const MessageInput = () => {
     const sel = useConversationStore((s) => s.selectedConversation);
     const isOnline = useNetworkStatus();
     const { addToQueue } = useOfflineStore();
+
+    // ✅ Rate limit handler
+    const { isRateLimited, timeLeft, triggerRateLimit } = useRateLimitHandler(5000);
 
     // ✅ Fetch logged-in user once
     useEffect(() => {
@@ -65,10 +69,9 @@ const MessageInput = () => {
     const debouncedTyping = useMemo(() => debounce(handleTyping, 300), [handleTyping]);
 
     // 📤 Send text message
-
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!msgText.trim() || !me || !sel?._id) return;
+        if (!msgText.trim() || !me || !sel?._id || isRateLimited) return;
 
         const tempId = uuidv4();
         const tempMessage: ITempMessage = {
@@ -86,6 +89,7 @@ const MessageInput = () => {
         addMessage(tempMessage);
         updateLastMessage(tempMessage.conversationId, tempMessage);
         setMsgText("");
+
         if (!isOnline || socket.disconnected) {
             await addToQueue({ ...tempMessage, tempId: tempId });
             toast("Message queued. Will send when online.");
@@ -103,6 +107,11 @@ const MessageInput = () => {
                 }),
             });
 
+            if (res.status === 429) {
+                triggerRateLimit(); // ✅ centralized
+                return;
+            }
+
             if (!res.ok) throw new Error("Failed to send message");
             const message = await res.json();
 
@@ -114,7 +123,7 @@ const MessageInput = () => {
         }
     };
 
-    // 🖼️ Handle image upload
+    // 🖼️ Handle image upload (same as before)
     const handleImageUpload = async (result: { url?: string; fileId?: string }) => {
         if (!result.url || !me || !sel) return;
 
@@ -146,7 +155,6 @@ const MessageInput = () => {
     return (
         <div className="relative bg-gray-primary p-2 flex gap-4 items-center">
             <div className="relative flex gap-2 ml-2">
-                {/* Emoji Picker can be added here */}
                 <Laugh className="text-gray-600 dark:text-gray-400" />
                 <Plus className="text-gray-600 dark:text-gray-400" />
                 <Button
@@ -164,13 +172,19 @@ const MessageInput = () => {
                 <div className="flex-1">
                     <Input
                         type="text"
-                        placeholder="Type a message"
+                        placeholder={
+                            isRateLimited
+                                ? `Please wait ${timeLeft}s...`
+                                : "Type a message"
+                        }
                         className="py-2 text-sm w-full rounded-lg shadow-sm bg-[hsl(var(--gray-tertiary))] focus-visible:ring-transparent"
                         value={msgText}
                         onChange={(e) => {
                             setMsgText(e.target.value);
-                            if (sel?._id) debouncedTyping(String(sel._id));
+                            if (sel?._id && !isRateLimited)
+                                debouncedTyping(String(sel._id));
                         }}
+                        disabled={isRateLimited}
                         onKeyDown={(e) => {
                             if (e.key === "Enter" && !e.shiftKey) {
                                 e.preventDefault();
@@ -186,6 +200,7 @@ const MessageInput = () => {
                             type="submit"
                             size="sm"
                             className="bg-transparent text-[hsl(var(--foreground))] hover:bg-transparent"
+                            disabled={isRateLimited}
                         >
                             <Send />
                         </Button>
@@ -194,6 +209,7 @@ const MessageInput = () => {
                             type="button"
                             size="sm"
                             className="bg-transparent text-[hsl(var(--foreground))] hover:bg-transparent"
+                            disabled={isRateLimited}
                         >
                             <Mic />
                         </Button>
