@@ -49,7 +49,7 @@ const RightPanel = () => {
             <MessageContainer />
 
             {/* INPUT */}
-            <MessageInput />
+            <MessageInput onSend={() => { }} />
         </div>
     );
 };

@@ -13,7 +13,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const message = await Message.findById(params.id);
     if (!message) return NextResponse.json({ error: "Message not found" }, { status: 404 });
 
-    const existingReaction = message.reactions.find((r: any) => r.emoji === emoji);
+    const existingReaction = message.reactions.find((r: { emoji: string }) => r.emoji === emoji);
     if (existingReaction) {
         const userIndex = existingReaction.users.findIndex(
             (u: string) => u.toString() === session.user.email
@@ -29,7 +29,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     await message.save();
 
-    // io.to(message.conversation.toString()).emit("message:reacted", message);
+    //  io.to(message.conversation.toString()).emit("message:reacted", message);
 
     return NextResponse.json({ success: true, message });
 }
