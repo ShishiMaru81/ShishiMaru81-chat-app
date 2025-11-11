@@ -4,11 +4,14 @@ import { Server, Socket } from "socket.io";
 import cors from "cors";
 import { createClient } from "redis";
 import { createAdapter } from "@socket.io/redis-adapter";
+import dotenv from "dotenv";
+//import { editMessage, reactToMessage } from "@/lib/api";
 
 interface CustomSocket extends Socket {
     userId: string;
     isAdmin: boolean;
 }
+dotenv.config();
 
 const app = express();
 app.use(cors());
@@ -23,8 +26,7 @@ const io = new Server(server, {
 });
 
 //  REDIS CONFIG
-const pubClient = createClient({ url: "redis://default:z1wD6s2xExHPg42hM0DRCUlN3RMVUqq6@redis-12403.c8.us-east-1-4.ec2.redns.redis-cloud.com:12403" });
-console.log(process.env.REDIS_URL);
+const pubClient = createClient({ url: process.env.REDIS_URL });
 const subClient = pubClient.duplicate();
 
 await Promise.all([pubClient.connect(), subClient.connect()]);
@@ -68,6 +70,7 @@ io.on("connection", async (rawSocket) => {
         io.to("admins").emit("dashboard:update", { activeUsers });
     }
 
+    //  ADMIN EVENTS
     socket.on("admin:join", async () => {
         socket.join("admins");
         const [activeUsers, totalMessagesToday] = await Promise.all([
@@ -80,12 +83,14 @@ io.on("connection", async (rawSocket) => {
         });
     });
 
+    //  CONVERSATION EVENTS
     socket.on("join", (conversationId: string) => {
         socket.join(conversationId);
         socket.emit("joined", conversationId);
         console.log(`🟢 User ${userId} joined conversation ${conversationId}`);
     });
 
+    //  TYPING EVENTS
     socket.on("typing", (conversationId: string, username: string) => {
         socket.to(conversationId).emit("typing", { username });
 
@@ -96,13 +101,12 @@ io.on("connection", async (rawSocket) => {
         }, 3000);
         typingTimers.set(userId, timeout);
     });
-
     socket.on("stopTyping", (conversationId: string, username: string) => {
         clearTimeout(typingTimers.get(username));
         typingTimers.delete(username);
         socket.to(conversationId).emit("stopTyping", { username });
     });
-
+    // Message send event (increments daily message count)
     socket.on("message:send", async (msg, ack) => {
         await resetDailyCounterIfNeeded();
         const total = await pubClient.incr(MESSAGE_COUNT_KEY);
@@ -113,6 +117,21 @@ io.on("connection", async (rawSocket) => {
         if (ack) ack({ status: "ok", message: "Delivered" });
     });
 
+    // Message Reaction event +++
+    socket.on("message:react", async ({ messageId, emoji, userId }) => {
+        //reactToMessage(messageId, emoji, userId)
+        io.to(messageId).emit("message:reacted", { messageId, emoji })
+    })
+
+    // Message Edit event +++
+    socket.on("message:edit", async ({ messageId, content }) => {
+        //   editMessage(messageId, content)
+        io.to(messageId).emit("message:edited", { messageId, content })
+    })
+    socket.on("message:delete", async ({ messageId }) => {
+        console.log("message:delete", messageId)
+        io.to(messageId).emit("message:deleted", { messageId })
+    })
     socket.on("disconnect", async () => {
         if (!isAdmin) {
             await pubClient.sRem(PRESENCE_KEY, userId);
