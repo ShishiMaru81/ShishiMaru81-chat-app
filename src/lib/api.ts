@@ -1,5 +1,8 @@
 // lib/api.ts
 //import axios from "axios";
+
+import { socket } from "./socketClient";
+
 // Client-side call to fetch user info from your API
 export async function getMe() {
     const res = await fetch("/api/me");
@@ -97,6 +100,7 @@ export async function deleteMessage(id: string) {
         method: "DELETE",
     });
     if (!res.ok) throw new Error("Failed to delete message");
+    socket.emit("message:delete", { messageId: id });
     return await res.json();
 }
 export async function reactToMessage(id: string, emoji: string, userId: string) {

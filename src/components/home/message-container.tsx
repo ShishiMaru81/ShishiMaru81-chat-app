@@ -90,6 +90,16 @@ const MessageContainer = () => {
         socket.on('message:new', handleNewMessage);
         socket.on('typing', handleTyping);
         socket.on('stopTyping', handleStopTyping);
+        socket.on("message:deleted", ({ messageId }) => {
+            // use zustand setState to update messages (setMessages expects a full array, not an updater function)
+            useConversationStore.setState((state) => ({
+                messages: state.messages.map((msg) =>
+                    msg._id === messageId
+                        ? { ...msg, isDeleted: true, text: "This message was deleted" }
+                        : msg
+                ),
+            }));
+        });
 
         return () => {
             socket.emit('leave', sel._id);

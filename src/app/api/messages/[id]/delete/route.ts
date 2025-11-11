@@ -21,7 +21,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     await message.save();
 
     // Emit event for real-time UI update
-    // io.to(message.conversation.toString()).emit("message:deleted", message);
 
     return NextResponse.json({ success: true });
 }
