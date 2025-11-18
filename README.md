@@ -48,46 +48,195 @@ npm run dev
 ## Project Structure
 
 ```
-src/
-├── app/                    # Next.js App Router
-│   ├── api/               # API routes
-│   │   ├── auth/          # Authentication endpoints
-│   │   ├── conversations/ # Conversation management
-│   │   ├── messages/      # Message handling
-│   │   └── users/         # User management
-│   ├── (chat)/            # Chat pages (grouped routes)
-│   ├── login/             # Login page
-│   ├── register/          # Registration page
-│   ├── layout.tsx         # Root layout
-│   └── page.tsx           # Home page
-├── components/            # React Components
-│   ├── home/              # Chat interface components
-│   │   ├── dialogs/       # Modal dialogs
-│   │   ├── ChatBox.tsx    # Main chat container
-│   │   ├── left-panel.tsx # Sidebar navigation
-│   │   └── userProfile.tsx # User profile management
-│   └── ui/                # Reusable UI components
-├── lib/                   # Utilities & Configurations
-│   ├── controllers/       # Business logic controllers
-│   ├── repositories/      # Data access layer
-│   ├── services/          # Business services
-│   ├── validators/        # Input validation schemas
-│   ├── api.ts            # API client functions
-│   ├── auth.ts           # Authentication configuration
-│   ├── db.ts             # Database connection
-│   └── utils.ts          # Utility functions  
-├── models/               # MongoDB Models
-│   ├── User.ts           # User model
-│   ├── Message.ts        # Message model
-│   └── Conversation.ts   # Conversation model
-├── store/                # State Management
-│   ├── chat-store.ts     # Chat state (Zustand)
-│   └── useSocketStore.ts # Socket connection state
-├── hooks/                # Custom React Hooks
-├── providers/            # Context Providers
-├── types/                # TypeScript Type Definitions
-├── middleware.ts         # Next.js middleware
-└── dummy-data/           # Mock data for development
+├── Bin
+│   ├── register
+│   │   └── route.ts
+│   ├── socketHandlers.ts
+│   └── useConversationId.ts
+├── components.json
+├── dist
+│   └── socket.js
+├── docker-compose.yml
+├── Dockerfile
+├── Dockerfile.socket
+├── eslint.config.mjs
+├── next-auth.d.ts
+├── next-env.d.ts
+├── next.config.ts
+├── package-lock.json
+├── package.json
+├── postcss.config.mjs
+├── public
+│   ├── bg-dark.png
+│   ├── bg-light.png
+│   ├── dall-e.png
+│   ├── desktop-hero.png
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── gpt.png
+│   ├── next.svg
+│   ├── placeholder.png
+│   ├── vercel.svg
+│   └── window.svg
+├── README.md
+├── socket.ts
+├── src
+│   ├── app
+│   │   ├── (chat)
+│   │   ├── admin
+│   │   │   ├── page.tsx
+│   │   │   ├── settings
+│   │   │   │   └── page.tsx
+│   │   │   └── users
+│   │   │       └── page.tsx
+│   │   ├── api
+│   │   │   ├── admin
+│   │   │   │   ├── changeRoal
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── dashboard
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── toggleban
+│   │   │   │       └── route.ts
+│   │   │   ├── auth
+│   │   │   │   ├── [...nextauth]
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── imagekit-auth
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── sendOtp
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── verify-otp
+│   │   │   │       └── route.ts
+│   │   │   ├── conversations
+│   │   │   │   ├── [id]
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── me
+│   │   │   │   └── route.ts
+│   │   │   ├── messages
+│   │   │   │   ├── [id]
+│   │   │   │   │   ├── delete
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   ├── edit
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── react
+│   │   │   │   │       └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── testdb
+│   │   │   │   └── route.ts
+│   │   │   ├── updateImage
+│   │   │   │   └── route.ts
+│   │   │   ├── user
+│   │   │   │   └── [email]
+│   │   │   │       └── route.ts
+│   │   │   └── users
+│   │   │       └── route.ts
+│   │   ├── favicon.ico
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   ├── login
+│   │   │   └── page.tsx
+│   │   ├── page.tsx
+│   │   └── register
+│   │       └── page.tsx
+│   ├── components
+│   │   ├── admin
+│   │   │   ├── Charts.tsx
+│   │   │   ├── ConversationTable.tsx
+│   │   │   ├── ReportTable.tsx
+│   │   │   ├── Sidebar.tsx
+│   │   │   ├── SystemStatus.tsx
+│   │   │   ├── TopStats.tsx
+│   │   │   ├── UserActions.tsx
+│   │   │   └── UserTable.tsx
+│   │   ├── chat
+│   │   │   └── reaction-bar.tsx
+│   │   ├── home
+│   │   │   ├── chat-bubble-avatar.tsx
+│   │   │   ├── chat-bubble.tsx
+│   │   │   ├── chat-placeholder.tsx
+│   │   │   ├── ChatBox.tsx
+│   │   │   ├── ChatDaySeparator.tsx
+│   │   │   ├── conversation.tsx
+│   │   │   ├── dialogs
+│   │   │   │   ├── FileUpload.tsx
+│   │   │   │   ├── user-list-dialog.tsx
+│   │   │   │   └── UserItem.tsx
+│   │   │   ├── group-members-dialog.tsx
+│   │   │   ├── ImageDebug.tsx
+│   │   │   ├── ImageUpload.tsx
+│   │   │   ├── left-panel.tsx
+│   │   │   ├── message-container.tsx
+│   │   │   ├── message-input.tsx
+│   │   │   ├── ProfilePictureUpload.tsx
+│   │   │   ├── right-panel.tsx
+│   │   │   ├── theme-switch.tsx
+│   │   │   ├── UserAvatar.tsx
+│   │   │   └── userProfile.tsx
+│   │   └── ui
+│   │       ├── avatar.tsx
+│   │       ├── button.tsx
+│   │       ├── card.tsx
+│   │       ├── dialog.tsx
+│   │       ├── dropdown-menu.tsx
+│   │       ├── input.tsx
+│   │       ├── label.tsx
+│   │       └── sonner.tsx
+│   ├── context
+│   │   └── UserContext.tsx
+│   ├── dummy-data
+│   │   └── db.ts
+│   ├── lib
+│   │   ├── api.ts
+│   │   ├── auth.ts
+│   │   ├── controllers
+│   │   │   └── message.controller.ts
+│   │   ├── Db
+│   │   │   └── offlineMessages.ts
+│   │   ├── db.ts
+│   │   ├── hooks
+│   │   │   ├── useNetworkStatus.ts
+│   │   │   ├── useOfflineMessageSync.ts
+│   │   │   └── useRateLimitHandler.ts
+│   │   ├── mongo.ts
+│   │   ├── rateLimiter.ts
+│   │   ├── repositories
+│   │   │   └── message.repo.ts
+│   │   ├── sendOtp.ts
+│   │   ├── services
+│   │   │   └── message.service.ts
+│   │   ├── socket.ts
+│   │   ├── socketClient.tsx
+│   │   ├── svgs.tsx
+│   │   ├── utils.ts
+│   │   └── validators
+│   │       └──  message.schema.ts
+│   ├── middleware.ts
+│   ├── models
+│   │   ├── Conversation.ts
+│   │   ├── Devices.ts
+│   │   ├── Message.ts
+│   │   ├── OTP.ts
+│   │   ├── TempMessage.ts
+│   │   └── User.ts
+│   ├── pages
+│   │   └── api
+│   │       └── socket.ts
+│   ├── providers
+│   │   └── theme-provider.tsx
+│   ├── store
+│   │   ├── chat-store.ts
+│   │   ├── offline-store.ts
+│   │   └── useSocketStore.ts
+│   └── types
+│       ├── conversation.ts
+│       ├── next-auth.d.ts
+│       └── user.ts
+├── tailwind.config.ts
+├── tsconfig.json
+├── tsconfig.server.json
+├── types.d.ts
+└── utils
+    └── imagekit.ts
 ```
 
 ## Screenshots
