@@ -1,22 +1,40 @@
 // src/models/Message.ts
-import mongoose, { Schema, Document, models } from "mongoose";
+import mongoose, { Schema, models } from "mongoose";
 import { IUser } from "./User";
 
-export interface IMessage extends Document {
+export type MessageType = "text" | "image" | "video" | "audio" | "voice" | "file";
+
+export interface IReaction {
+    emoji: string;
+    users: mongoose.Types.ObjectId[] | (mongoose.Types.ObjectId | IUser)[];
+}
+
+export interface IMessage {
     _id: mongoose.Types.ObjectId;
-    sender: mongoose.Types.ObjectId; // user ref
+    sender: mongoose.Types.ObjectId | IUser; // populated or just id
     content: string;
-    repliedTo?: mongoose.Types.ObjectId;
-    reactions?: {
-        emoji: string;
-        users: mongoose.Types.ObjectId[]; // who reacted
-    }[];
+    repliedTo?: mongoose.Types.ObjectId | IMessagePopulated;
+    reactions?: IReaction[];
     isEdited: boolean;
     isDeleted: boolean;
-    messageType: "text" | "image" | "video";
+    messageType: MessageType;
     timestamp: Date;
     conversationId: mongoose.Types.ObjectId;
     createdAt: Date;
+}
+
+// Fully populated version for FE usage
+export interface IMessagePopulated extends Omit<IMessage, "sender" | "repliedTo"> {
+    sender: IUser;
+    repliedTo?: IMessagePopulated;
+}
+
+// For optimistic UI / temp messages
+export interface ITempMessage extends Omit<IMessage, "_id" | "timestamp" | "createdAt"> {
+    _id: string; // temp string id
+    timestamp: Date | string;
+    createdAt: Date | string;
+    isTemp?: boolean;
 }
 export interface MessageInputProps {
     onSend: (content: string) => void;
@@ -26,9 +44,6 @@ export interface MessageInputProps {
     onCancelEdit?: () => void;
 }
 
-export interface IMessagePopulated extends Omit<IMessage, 'sender'> {
-    sender: IUser;
-}
 
 const MessageSchema = new Schema<IMessage>({
     sender: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -44,7 +59,7 @@ const MessageSchema = new Schema<IMessage>({
     isDeleted: { type: Boolean, default: false },
     messageType: {
         type: String,
-        enum: ["text", "image", "video"],
+        enum: ["text", "image", "video", "audio", "voice", "file"],
         default: "text",
     },
     timestamp: { type: Date, default: Date.now },

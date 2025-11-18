@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { IConversation, IConversationPopulated } from "@/models/Conversation";
 import { IMessagePopulated } from "@/models/Message";
 import { ITempMessage } from "@/models/TempMessage";  // or wherever you define it
+import { socket } from "@/lib/socketClient";
 
 type MessageType = IMessagePopulated | ITempMessage;
 interface ChatStore {
@@ -32,6 +33,13 @@ interface ChatStore {
     incrementUnread: (conversationId: string) => void;
     clearUnread: (conversationId: string) => void;
 }
+export const reactToMessage = (msg: IMessagePopulated, emoji: string, userId: string) => {
+    socket.emit("message:react", {
+        messageId: msg._id,
+        emoji,
+        userId,
+    });
+};
 
 export const useConversationStore = create<ChatStore>((set, get) => ({
     selectedConversation: null,
