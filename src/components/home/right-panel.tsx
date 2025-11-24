@@ -5,7 +5,7 @@ import MessageInput from "./message-input";
 import MessageContainer from "./message-container";
 import ChatPlaceHolder from "@/components/home/chat-placeholder";
 import GroupMembersDialog from "./group-members-dialog";
-import { useConversationStore } from "@/store/chat-store";
+import { useConversationStore } from "@/store/conversation-store";
 import { useSession } from "next-auth/react";
 //import { useConversationId } from "@/hooks/useConversationId";
 

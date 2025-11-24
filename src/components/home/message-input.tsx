@@ -5,7 +5,7 @@ import { Laugh, Mic, Plus, Send, Image as ImageIcon } from "lucide-react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { getMe } from "@/lib/api";
-import { useConversationStore } from "@/store/chat-store";
+import { useConversationStore } from "@/store/conversation-store";
 import { socket } from "@/lib/socketClient";
 import { IUser } from "@/models/User";
 import { ImageUpload } from "./ImageUpload";

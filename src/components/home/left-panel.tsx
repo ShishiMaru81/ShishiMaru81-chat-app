@@ -10,7 +10,7 @@ import UserListDialog from './dialogs/user-list-dialog';
 import UserProfile from './userProfile';
 import { getConversations } from '@/lib/api'; // 👈 must exist in your API
 import { IConversationPopulated } from '@/models/Conversation';
-import { useConversationStore } from "@/store/chat-store";
+import { useConversationStore } from "@/store/conversation-store";
 
 const LeftPanel = () => {
     const { setSelectedConversation } = useConversationStore();

@@ -1,6 +1,6 @@
 import { IMessage, IMessagePopulated } from "@/models/Message";
 import ChatBubbleAvatar from "./chat-bubble-avatar";
-import { useConversationStore } from "@/store/chat-store";
+import { useConversationStore } from "@/store/conversation-store";
 import { Image } from "@imagekit/next";
 import { ITempMessage } from "@/models/TempMessage";
 import {

@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { useOfflineStore } from "@/store/offline-store";
 import { useNetworkStatus } from "./useNetworkStatus";
 import { socket } from "@/lib/socketClient";
-import { useConversationStore } from "@/store/chat-store"; // adjust import path
+import { useConversationStore } from "@/store/conversation-store"; // adjust import path
 import toast from "react-hot-toast";
 
 export function useOfflineMessageSync() {

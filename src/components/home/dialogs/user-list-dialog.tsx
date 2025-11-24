@@ -13,7 +13,7 @@ import { Button } from "../../ui/button";
 import { ImageIcon, MessageSquareDiff } from "lucide-react";
 import Image from "next/image";
 import toast from "react-hot-toast";
-import { useConversationStore } from "@/store/chat-store";
+import { useConversationStore } from "@/store/conversation-store";
 import { getMe, getUsers, createConversation } from "@/lib/api";
 
 import { useEffect, useRef, useState } from "react";
