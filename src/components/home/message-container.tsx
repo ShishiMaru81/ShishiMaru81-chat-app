@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useConversationStore } from "@/store/chat-store";
+import useChatStore from "@/store/chat-store";
 import { socket } from "@/lib/socketClient";
 import { IMessage, IMessagePopulated } from "@/models/Message";
 import ChatBubble from "./chat-bubble";
@@ -9,15 +9,22 @@ import ChatDaySeparator from "./ChatDaySeparator";
 import { useUser } from "@/context/UserContext";
 import { ITempMessage } from "@/models/TempMessage";
 import { deleteMessage } from "@/lib/api";
+import useSocketStore from "@/store/useSocketStore";
 
-const MessageContainer = () => {
-    const sel = useConversationStore(s => s.selectedConversation);
+
+interface MessageContainerProps {
+    conversationId: string;
+}
+
+const MessageContainer = ({ conversationId }: MessageContainerProps) => {
+    const sel = useChatStore(s => s.selectedConversation);
     let lastDate: string | null = null;
-    const { messages, addMessage, setMessages, setHasMore } = useConversationStore();
+    const { messagesByConversation, addMessage, setMessages, setHasMore } = useChatStore();
     const topRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const { user } = useUser();
     const [typingUsers, setTypingUsers] = useState<string[]>([]);
+    const { connect, joinConversation, leaveConversation } = useSocketStore();
 
     // 🕒 Store timeout IDs for each typing user
     const typingTimeouts = useRef<{ [username: string]: NodeJS.Timeout }>({});
@@ -30,35 +37,47 @@ const MessageContainer = () => {
             );
             const data = await res.json() as IMessagePopulated[];
             const redata = data.reverse();
-            if (redata.length < 20) setHasMore(false);
-            setMessages(redata, !!cursor);
+            if (redata.length < 20) setHasMore(String(sel?._id), false);
+            setMessages(String(sel?._id), redata, !!cursor);
         } catch (err) {
             console.error("Failed to load messages", err);
         }
     }, [sel?._id, setMessages, setHasMore]);
 
     useEffect(() => {
-        if (messages.length > 0 && bottomRef.current) {
+        if (messagesByConversation[conversationId].length > 0 && bottomRef.current) {
             bottomRef.current.scrollIntoView({ behavior: "auto" });
         }
-    }, [messages.length]);
+    }, [messagesByConversation[conversationId].length]);
 
     useEffect(() => {
         if (bottomRef.current) {
             bottomRef.current.scrollIntoView({ behavior: "smooth" });
         }
-    }, [messages.length]);
+    }, [messagesByConversation[conversationId].length]);
 
     useEffect(() => {
         fetchMessages();
     }, [sel?._id, fetchMessages]);
-
+    useEffect(() => {
+        connect();
+    }, [connect]);
     // SOCKET EVENTS
+
+    useEffect(() => {
+        joinConversation({ conversationId });
+
+        return () => {
+            leaveConversation({ conversationId });
+        };
+    }, [conversationId, joinConversation, leaveConversation]);
+
+
     useEffect(() => {
         if (!sel?._id) return;
         socket.emit('join', sel._id);
 
-        const handleNewMessage = (msg: IMessagePopulated) => addMessage(msg);
+        const handleNewMessage = (msg: IMessagePopulated) => addMessage(String(sel?._id), msg);
 
         const handleTyping = ({ username }: { username: string }) => {
             // Add or refresh typing user
@@ -90,15 +109,21 @@ const MessageContainer = () => {
         socket.on('message:new', handleNewMessage);
         socket.on('typing', handleTyping);
         socket.on('stopTyping', handleStopTyping);
-        socket.on("message:deleted", ({ messageId }) => {
-            // use zustand setState to update messages (setMessages expects a full array, not an updater function)
-            useConversationStore.setState((state) => ({
-                messages: state.messages.map((msg) =>
-                    msg._id === messageId
-                        ? { ...msg, isDeleted: true, text: "This message was deleted" }
-                        : msg
-                ),
-            }));
+        socket.on("message:deleted", ({ messageId, conversationId }) => {
+            useChatStore.setState((state) => {
+                const msgs = state.messagesByConversation[conversationId] || [];
+
+                return {
+                    messagesByConversation: {
+                        ...state.messagesByConversation,
+                        [conversationId]: msgs.map((msg) =>
+                            msg._id.toString() === messageId
+                                ? { ...msg, isDeleted: true, text: "This message was deleted" }
+                                : msg
+                        ),
+                    },
+                };
+            });
         });
 
         return () => {
@@ -124,7 +149,7 @@ const MessageContainer = () => {
         <div className="relative p-3 flex-1 overflow-auto h-full bg-chat-tile-light dark:bg-chat-tile-dark">
             <div className="mx-12 flex flex-col gap-3 h-full">
                 <div ref={topRef} />
-                {user && messages.map((msg) => {
+                {user && messagesByConversation[conversationId].map((msg) => {
                     const msgDate = new Date(msg.timestamp);
                     const dayKey = msgDate.toDateString();
                     const showSeparator = lastDate !== dayKey;
