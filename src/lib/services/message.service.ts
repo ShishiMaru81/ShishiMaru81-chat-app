@@ -3,6 +3,7 @@ import * as messageRepo from "@/lib/repositories/message.repo";
 import { CreateMessageInput } from "../validators/ message.schema";
 import { Types } from "mongoose";
 import { Conversation } from "@/models/Conversation";
+import Message, { IMessage } from "@/models/Message";
 
 export async function createMessage(data: CreateMessageInput) {
     // correctly map senderId → sender
@@ -26,4 +27,39 @@ export async function createMessage(data: CreateMessageInput) {
     // io.to(data.conversationId).emit("message:new", saved);
 
     //return saved;
+}
+
+interface Reaction {
+    emoji: string;
+    users: string[];
+}
+export async function updateMessageReaction({ messageId, emoji, userId }: { messageId: string; emoji: string; userId: string }) {
+    const msg = await Message.findById(messageId);
+    if (!msg) return null;
+
+    let reaction = msg.reactions.find((r: Reaction) => r.emoji === emoji);
+
+    if (reaction) {
+        // Toggle 
+        const index = reaction.users.findIndex(
+            (u: string) => u.toString() === userId
+        );
+
+        if (index !== -1) reaction.users.splice(index, 1);
+        else reaction.users.push(userId);
+    } else {
+        // New reaction
+        msg.reactions.push({
+            emoji,
+            users: [userId],
+        });
+    }
+
+    await msg.save();
+
+    // Populate 
+    return await msg.populate([
+        { path: "sender", select: "username avatarUrl" },
+        { path: "repliedTo", populate: { path: "sender" } },
+    ]);
 }
