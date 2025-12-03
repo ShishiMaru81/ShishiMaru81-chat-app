@@ -1,23 +1,17 @@
-// src/lib/services/presence.service.ts
-const onlineUsers = new Map(); // userId → socketIds[]
+const onlineUsers = new Map<string, string>(); // userId → socketId
 
-export function userConnected(userId: string, socketId: string) {
-    if (!onlineUsers.has(userId)) onlineUsers.set(userId, []);
-    onlineUsers.get(userId).push(socketId);
+export function setOnline(userId: string, socketId: string) {
+    onlineUsers.set(userId, socketId);
 }
 
-export function userDisconnected(userId: string, socketId: string) {
-    if (!onlineUsers.has(userId)) return;
-
-    const sockets = onlineUsers.get(userId).filter((id: string) => id !== socketId);
-    if (sockets.length === 0) onlineUsers.delete(userId);
-    else onlineUsers.set(userId, sockets);
+export function setOffline(userId: string) {
+    onlineUsers.delete(userId);
 }
 
-export function isUserOnline(userId: string) {
+export function isOnline(userId: string) {
     return onlineUsers.has(userId);
 }
 
 export function getOnlineUsers() {
-    return [...onlineUsers.keys()];
+    return Array.from(onlineUsers.keys());
 }
