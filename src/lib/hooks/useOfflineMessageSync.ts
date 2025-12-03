@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useOfflineStore } from "@/store/offline-store";
 import { useNetworkStatus } from "./useNetworkStatus";
-import { socket } from "@/lib/socketClient";
+import { socket } from "@/lib/socket/socketClient";
 import useChatStore from "@/store/chat-store"; // adjust import path
 import toast from "react-hot-toast";
 
@@ -46,7 +46,7 @@ export function useOfflineMessageSync() {
                         if (!res.ok) throw new Error("Failed to send message");
 
                         const savedMsg = await res.json();
-                        socket.emit("message:send", savedMsg);
+                        socket.emit("message:new", savedMsg);
                         replaceTempMessage(msg.conversationId, msg.tempId, savedMsg);
                         await removeFromQueue(msg.tempId);
 
