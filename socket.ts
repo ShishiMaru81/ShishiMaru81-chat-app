@@ -5,6 +5,8 @@ import cors from "cors";
 import { createClient } from "redis";
 import { createAdapter } from "@socket.io/redis-adapter";
 import dotenv from "dotenv";
+//import Message from "./src/models/Message.js";
+//import User from "./src/models/User";
 //import { editMessage, reactToMessage } from "@/lib/api";
 
 interface CustomSocket extends Socket {
@@ -18,6 +20,7 @@ app.use(cors());
 
 const server = http.createServer(app);
 const io = new Server(server, {
+    path: "/api/socket",
     cors: {
         origin: process.env.ORIGIN || "*",
         methods: ["GET", "POST"],
@@ -27,10 +30,14 @@ const io = new Server(server, {
 
 //  REDIS CONFIG
 const pubClient = createClient({ url: process.env.REDIS_URL });
+//console.log(process.env.REDIS_URL)
 const subClient = pubClient.duplicate();
 
 await Promise.all([pubClient.connect(), subClient.connect()]);
 io.adapter(createAdapter(pubClient, subClient));
+pubClient.on("error", (err) => {
+    console.log("❌ Redis Client Error:", err);
+});
 
 console.log("🔗 Redis adapter connected");
 
@@ -118,10 +125,50 @@ io.on("connection", async (rawSocket) => {
     });
 
     // Message Reaction event +++
-    socket.on("message:react", async ({ messageId, emoji, userId }) => {
-        //reactToMessage(messageId, emoji, userId)
-        io.to(messageId).emit("message:reacted", { messageId, emoji })
-    })
+    // socket.on("message:react", async ({ messageId, emoji, userId }) => {
+    //     try {
+    //         const msg = await Message.findById(messageId)
+
+    // if (!msg) return;
+
+    //         let reaction = msg.reactions!.find((r: any) => r.emoji === emoji);
+
+    //         // If reaction exists, toggle user
+    //         if (reaction) {
+    //             const index = reaction.users.findIndex(
+    //                 (u: string) => u.toString() === userId
+    //             );
+
+    //             if (index !== -1) {
+    //                 reaction.users.splice(index, 1); // Remove reaction
+    //             } else {
+    //                 reaction.users.push(userId); // Add reaction
+    //             }
+    //         } else {
+    //             // new reaction
+    //             msg.reactions!.push({
+    //                 emoji,
+    //                 users: [userId],
+    //             });
+    //         }
+
+    // await msg.save();
+
+    //         const populated = await msg.populate([
+    //             { path: "sender", select: "username avatarUrl" },
+    //             { path: "repliedTo", populate: { path: "sender" } },
+    //         ]);
+
+    //         // Broadcast to room
+    //         io.to(msg.conversationId.toString()).emit(
+    //             "message:reaction:updated",
+    //             populated
+    //         );
+    //     } catch (err) {
+    //         console.log("Error reacting to message:", err);
+    //     }
+    // });
+
 
     // Message Edit event +++
     socket.on("message:edit", async ({ messageId, content }) => {
