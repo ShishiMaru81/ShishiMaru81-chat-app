@@ -33,7 +33,7 @@ interface ChatStore {
     incrementUnread: (conversationId: string) => void;
     clearUnread: (conversationId: string) => void;
 }
-export const reactToMessage = (msg: IMessagePopulated, emoji: string, userId: string) => {
+export const reactToMessage = (msg: IMessagePopulated, emoji: string) => {
     socket.emit("message:reaction", {
         messageId: String(msg._id),
         emoji,
