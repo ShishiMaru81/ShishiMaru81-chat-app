@@ -11,7 +11,7 @@ export interface IReaction {
 
 export interface IMessage {
     _id: mongoose.Types.ObjectId;
-    sender: mongoose.Types.ObjectId | IUser; // populated or just id
+    sender: mongoose.Types.ObjectId; // populated or just id
     content: string;
     repliedTo?: mongoose.Types.ObjectId | IMessagePopulated;
     reactions?: IReaction[];
