@@ -12,12 +12,13 @@ export async function POST(req: NextRequest) {
         if (!session) {
             return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
         }
+        const senderId = session.user.id;
         const identifier = session.user.email;
         const { success } = await messageRateLimiter.limit(identifier);
         if (!success) return NextResponse.json({ error: "Too many messages" }, { status: 429 });
-        const parsed = CreateMessageSchema.parse(await req.json());
-
-        const message = await handleCreateMessage(parsed);
+        const requestBody = await req.json();
+        const parsed = CreateMessageSchema.parse(requestBody);
+        const message = await handleCreateMessage(parsed, senderId);
 
         return NextResponse.json(message, { status: 201 });
     } catch (error) {
