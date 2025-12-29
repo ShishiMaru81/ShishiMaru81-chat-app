@@ -1,10 +1,10 @@
 // src/server/socket/handlers/delivery/delivered.handler.ts
 import type { Server as IOServer } from "socket.io";
-import {
+import type {
     ServerToClientEvents,
     ClientToServerEvents,
     MessageDeliveredPayload,
-    SocketEvents,
+    //SocketEvents,
 } from "@/server/socket/types/SocketEvents";
 import { markDelivered } from "@/lib/services/delivery.service";
 
@@ -14,19 +14,19 @@ type Socket = import("socket.io").Socket<
     ServerToClientEvents
 >;
 
-export function deliveredHandler(io: IO, socket: Socket) {
+export function deliveredHandler(_io: IO, socket: Socket) {
     socket.on(
-        SocketEvents.MESSAGE_DELIVERED,
+        "message:delivered",
         async ({ messageId, conversationId }: MessageDeliveredPayload) => {
             const userId = socket.data.user._id;
 
-            const updated = await markDelivered(messageId, userId);
+            await markDelivered(messageId, userId);
 
-            io.to(conversationId).emit(SocketEvents.MESSAGE_DELIVERED, {
+            socket.to(conversationId).emit("message:delivered:update", {
                 messageId,
-                conversationId,
+                //conversationId,
                 userId,
-                at: new Date(),
+                deliveredAt: new Date(),
             });
         },
     );
