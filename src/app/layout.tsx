@@ -2,7 +2,6 @@
 //import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/providers/theme-provider";
-import { useEffect } from "react";
 import { SessionProvider } from "next-auth/react";
 import { Toaster } from "@/components/ui/sonner"
 import { UserProvider } from "@/context/UserContext";
@@ -19,9 +18,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  useEffect(() => {
-    fetch("/api/socket"); // Ensure the server gets initialized
-  }, []);
   return (
     <html lang="en" suppressHydrationWarning>
       <body
