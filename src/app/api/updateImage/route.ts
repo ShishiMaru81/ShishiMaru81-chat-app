@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/Db/db";
 import { User } from "@/models/User";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/utils/auth";
+import { authOptions } from "@/lib/utils/auth/auth";
 
 export async function PUT(request: NextRequest) {
     try {

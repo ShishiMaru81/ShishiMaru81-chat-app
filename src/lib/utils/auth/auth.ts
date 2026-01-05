@@ -3,11 +3,11 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import AppleProvider from "next-auth/providers/apple";
 import bcrypt from "bcryptjs";
-import { connectToDatabase } from "../Db/db";
+import { connectToDatabase } from "../../Db/db";
 import { User } from "@/models/User";
 import { MongoDBAdapter } from "@next-auth/mongodb-adapter";
-import clientPromise from "../Db/mongo";
-import { loginRateLimiter } from "./rateLimiter";
+import clientPromise from "../../Db/mongo";
+import { loginRateLimiter } from "../rateLimiter";
 import { headers } from "next/headers";
 
 
@@ -24,12 +24,12 @@ export const authOptions: NextAuthOptions = {
                 const ip = (await headers()).get("x-forwarded-for") || "unknown";
 
                 // Apply rate limit
-                const { success, } = await loginRateLimiter.limit(ip);
+                // const { success, } = await loginRateLimiter.limit(ip);
                 console.log(`Login attempt from IP ${ip}`);
-                if (!success) {
-                    console.warn(`Too many login attempts from IP ${ip}`);
-                    throw new Error("Too many login attempts. Please try again later.");
-                }
+                // if (!success) {
+                //     console.warn(`Too many login attempts from IP ${ip}`);
+                //     throw new Error("Too many login attempts. Please try again later.");
+                // }
                 if (!credentials?.email || !credentials?.password) {
                     throw new Error("Missing email or password");
                 }
@@ -110,7 +110,7 @@ export const authOptions: NextAuthOptions = {
 
         async session({ session, token }) {
             if (session.user) {
-                //session.user.id = token.id as string;
+                session.user.id = token.id as string;
                 session.user.image =
                     (token.picture as string) || session.user.image || "";
                 session.user.role = token.role as string; // ✅ role available in session
