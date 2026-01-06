@@ -40,6 +40,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 #dist/socket.js
-dist/socket.js
-dist/src/models/Message.js
-dist/src/models/User.js
+dist
