@@ -1,0 +1,11 @@
+// src/server/socket/handlers/delivery/seen.handler.ts
+import { Socket, Server } from "socket.io";
+import { SocketEvents } from "../../types/SocketEvents";
+
+export const SeenHandler = (_io: Server, socket: Socket) => {
+    socket.on(SocketEvents.MESSAGE_SEEN, (payload) => {
+        const { conversationId, messageId } = payload;
+        if (!conversationId || !messageId) return;
+        socket.to(conversationId).emit(SocketEvents.MESSAGE_SEEN, { messageId });
+    });
+}
