@@ -35,8 +35,9 @@ export function registerMessageHandlers(io: Server, socket: Socket) {
         if (!message?.conversationId) {
             return ack?.({ ok: false, error: "Invalid message payload" });
         }
-        io.to(message.conversationId).emit(SocketEvents.MESSAGE_NEW, message);
-        console.log("🔌 message:new", message);
+        const room = `conversation:${message.conversationId}`;
+
+        io.to(room).emit(SocketEvents.MESSAGE_NEW);
         io.to("admins").emit("dashboard:update", { totalMessagesToday: 1 });
         if (ack) ack({ status: "ok", message: "Delivered" });
     });

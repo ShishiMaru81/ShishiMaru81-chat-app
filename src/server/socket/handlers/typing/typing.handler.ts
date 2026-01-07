@@ -21,7 +21,7 @@ export function typingHandler(io: IO, socket: Socket) {
 
         socket.to(conversationId).emit(SocketEvents.TYPING_START, {
             conversationId,
-            userId: socket.data.user._id,
+            userId: socket.data.userId,
         });
     });
 
@@ -30,7 +30,7 @@ export function typingHandler(io: IO, socket: Socket) {
 
         socket.to(conversationId).emit(SocketEvents.TYPING_STOP, {
             conversationId,
-            userId: socket.data.user._id,
+            userId: socket.data.userId,
         });
     });
 }
