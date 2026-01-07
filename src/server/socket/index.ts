@@ -22,7 +22,6 @@ export async function initSocket(server: any) {
         presenceHandler(io, socket);
         registerMessageHandlers(io, socket);
         typingHandler(io, socket);
-        registerMessageHandlers(io, socket);
         messageEditHandler(io, socket);
         DeleteHandler(io, socket);
     });
