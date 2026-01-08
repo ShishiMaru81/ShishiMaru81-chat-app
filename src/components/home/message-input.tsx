@@ -6,7 +6,7 @@ import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { getMe } from "@/lib/utils/api";
 import useChatStore from "@/store/chat-store";
-import { socket } from "@/lib/socket/socketClient";
+import { getSocket } from "@/lib/socket/socketClient";
 import { IUser } from "@/models/User";
 import { ImageUpload } from "./ImageUpload";
 import { toast } from "sonner"
@@ -16,6 +16,8 @@ import { useOfflineStore } from '@/store/offline-store';
 import { useNetworkStatus } from '@/lib/hooks/useNetworkStatus';
 import { useRateLimitHandler } from "@/lib/hooks/useRateLimitHandler";
 import { MessageInputProps } from "@/models/Message";
+import useSocketStore from "@/store/useSocketStore";
+import { editMessageById } from "@/lib/services/message.service";
 
 // 🧠 Small debounce util
 function debounce<T extends unknown[]>(fn: (...args: T) => void, delay: number) {
@@ -32,11 +34,12 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
     const [showImageUpload, setShowImageUpload] = useState(false);
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    const { addMessage, updateLastMessage, replaceTempMessage } = useChatStore();
+    const { addMessage, updateLastMessage, replaceTempMessage, editingMessage, clearEditingMessage } = useChatStore();
     const sel = useChatStore((s) => s.selectedConversation);
     const isOnline = useNetworkStatus();
     const { addToQueue } = useOfflineStore();
-
+    const { sendMessage, editMessageUpdate } = useSocketStore();
+    const socket = getSocket();
     // ✅ Rate limit handler
     const { isRateLimited, timeLeft, triggerRateLimit } = useRateLimitHandler(5000);
 
@@ -52,6 +55,11 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
         };
         fetchMe();
     }, []);
+    useEffect(() => {
+        if (editingMessage) {
+            setMsgText(editingMessage.content);
+        }
+    }, [editingMessage]);
 
     // 📝 Handle typing indicators with debounce
     const handleTyping = useCallback(
@@ -74,6 +82,15 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
         e.preventDefault();
         if (!msgText.trim() || !me || !sel?._id || isRateLimited) return;
 
+        if (editingMessage) {
+            await editMessageById(String(editingMessage._id), msgText.trim());
+            //editMessageUpdate();
+            clearEditingMessage();
+            setMsgText("");
+            return;
+        }
+
+
         const tempId = uuidv4();
         const tempMessage: ITempMessage = {
             _id: tempId,
@@ -82,7 +99,6 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
             senderId: String(me._id),
             content: msgText.trim(),
             messageType: "text",
-            createdAt: new Date().toISOString(),
             status: isOnline ? "pending" : "queued",
             sender: me,
             timestamp: new Date().toISOString(),
@@ -116,8 +132,8 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
             if (!res.ok) throw new Error("Failed to send message");
             const message = await res.json();
 
+            sendMessage(message);
             replaceTempMessage(String(sel._id), tempId, message);
-            socket.emit("message:send", message);
         } catch (err) {
             console.error("Send message failed:", err);
             toast.error("Message failed to send");
@@ -144,7 +160,7 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
 
             const message = await res.json();
             addMessage(String(sel._id), message);
-            socket.emit("message:send", message);
+            sendMessage(message);
             toast.success("Image sent successfully!");
             setShowImageUpload(false);
         } catch (err) {
@@ -153,7 +169,17 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
         }
     };
 
-    return (
+    return (<>
+        {false && (
+            <div className="bg-amber-600 flex items-center gap-2 ml-4 mt-2 text-sm text-gray-500 dark:text-gray-400">
+                <span>typingText</span>
+                <div className="flex space-x-1 animate-bounce">
+                    <span className="dot"></span>
+                    <span className="dot"></span>
+                    <span className="dot"></span>
+                </div>
+            </div>
+        )}
         <div className="relative bg-gray-primary p-2 flex gap-4 items-center">
             <div className="relative flex gap-2 ml-2">
                 <Laugh className="text-gray-600 dark:text-gray-400" />
@@ -253,6 +279,7 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
                 </div>
             )}
         </div>
+    </>
     );
 };
 

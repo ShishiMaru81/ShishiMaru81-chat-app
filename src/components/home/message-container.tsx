@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import useChatStore from "@/store/chat-store";
 import { socket } from "@/lib/socket/socketClient";
-import { IMessage, IMessagePopulated } from "@/models/Message";
+import { IMessagePopulated } from "@/models/Message";
 import ChatBubble from "./chat-bubble";
 import ChatDaySeparator from "./ChatDaySeparator";
 import { useUser } from "@/context/UserContext";
@@ -75,7 +75,6 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
         if (!sel?._id) return;
 
         // JOIN
-        socket.emit("conversation:join", { conversationId: String(sel._id) });
 
         const handleNewMessage = (data: MessageNewPayload) => {
             // If your store expects IMessagePopulated:
@@ -143,7 +142,7 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
                         <div key={String(msg._id)}>
                             {showSeparator && <ChatDaySeparator date={msgDate} />}
                             <ChatBubble
-                                message={msg as ITempMessage | IMessage}
+                                message={msg as ITempMessage | IMessagePopulated}
                                 currentUserId={user?._id?.toString()}
                                 onEdit={(id: string, newText: string) => socket.emit('message:edit', { messageId: id, text: newText })}
                                 onDelete={deleteMessage}
@@ -156,7 +155,7 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
 
                 {/* ✅ Typing indicator */}
                 {typingUsers.length > 0 && (
-                    <div className="flex items-center gap-2 ml-4 mt-2 text-sm text-gray-500 dark:text-gray-400">
+                    <div className="bg-amber-600 flex items-center gap-2 ml-4 mt-2 text-sm text-gray-500 dark:text-gray-400">
                         <span>{typingText}</span>
                         <div className="flex space-x-1 animate-bounce">
                             <span className="dot"></span>
