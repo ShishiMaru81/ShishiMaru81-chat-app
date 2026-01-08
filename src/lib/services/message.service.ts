@@ -1,4 +1,5 @@
 // src/lib/services/message.service.ts
+'use server';
 import * as messageRepo from "@/lib/repositories/message.repo";
 import { CreateMessageInput } from "../validators/ message.schema";
 import { Types } from "mongoose";
@@ -56,6 +57,20 @@ export async function updateMessageReaction({ messageId, emoji, userId }: { mess
         });
     }
 
+    await msg.save();
+
+    // Populate 
+    return await msg.populate([
+        { path: "sender", select: "username avatarUrl" },
+        { path: "repliedTo", populate: { path: "sender" } },
+    ]);
+}
+export async function editMessageById(messageId: string, text: string) {
+    const msg = await Message.findById(messageId);
+    if (!msg) return null;
+
+    msg.content = text;
+    msg.isEdited = true;
     await msg.save();
 
     // Populate 
