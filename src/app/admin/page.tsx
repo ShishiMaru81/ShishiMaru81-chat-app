@@ -20,16 +20,15 @@ export default function AdminDashboard() {
     }, [session, status, router])
     useEffect(() => {
         const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL, {
-            transports: ["websocket"], // avoid polling issues
-            auth: {
-                userId: session?.user?.email,
-                isAdmin: true
-            }, // required by your server
+            path: "/api/socket",
+            autoConnect: false, // you control when to connect
+            transports: ["websocket"], // prefer ws
+            withCredentials: true,
         });
 
-        socket.on("connect", () => {
+        socket.on("connection", () => {
             console.log("✅ Connected to socket:", socket.id);
-            socket.emit("admin:join");
+            //socket.emit("admin:join");
         });
 
         socket.on("connect_error", (err) => {
