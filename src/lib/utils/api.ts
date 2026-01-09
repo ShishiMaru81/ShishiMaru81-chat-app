@@ -85,16 +85,7 @@ export async function deleteConversation(id: string) {
     if (!res.ok) throw new Error("Failed to delete conversation");
     return await res.json();
 }
-export async function editMessage(id: string, content: string) {
-    const res = await fetch(`/api/messages/${id}/edit`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
-    });
-    console.log(res);
-    if (!res.ok) throw new Error("Failed to edit message");
-    return await res.json();
-}
+
 export async function deleteMessage(id: string) {
     const res = await fetch(`/api/messages/${id}/delete`, {
         method: "DELETE",
