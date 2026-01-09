@@ -100,7 +100,7 @@ export async function deleteMessage(id: string) {
         method: "DELETE",
     });
     if (!res.ok) throw new Error("Failed to delete message");
-    socket.emit("message:delete", { messageId: id });
+    //socket.emit("message:delete", { messageId: id });
     return await res.json();
 }
 export async function reactToMessage(id: string, emoji: string, userId: string) {
