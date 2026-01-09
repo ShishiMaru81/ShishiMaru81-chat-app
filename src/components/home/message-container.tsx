@@ -10,7 +10,7 @@ import { useUser } from "@/context/UserContext";
 import { ITempMessage } from "@/models/TempMessage";
 import { deleteMessage } from "@/lib/utils/api";
 import useSocketStore from "@/store/useSocketStore";
-import { MessageNewPayload } from "@/server/socket/types/SocketEvents";
+import { MessageEditPayload, MessageNewPayload } from "@/server/socket/types/SocketEvents";
 
 
 interface MessageContainerProps {
@@ -20,7 +20,7 @@ interface MessageContainerProps {
 const MessageContainer = ({ conversationId }: MessageContainerProps) => {
     const sel = useChatStore(s => s.selectedConversation);
     let lastDate: string | null = null;
-    const { messagesByConversation, addMessage, setMessages, setHasMore } = useChatStore();
+    const { messagesByConversation, addMessage, setMessages, setHasMore, updateEditedMessage, updateLastMessage } = useChatStore();
     const topRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const { user } = useUser();
@@ -78,8 +78,12 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
 
         const handleNewMessage = (data: MessageNewPayload) => {
             // If your store expects IMessagePopulated:
+            updateLastMessage(String(sel._id), data as unknown as IMessagePopulated);
             addMessage(String(sel._id), data as unknown as IMessagePopulated);
         };
+        const handleEditMessage = (data: MessageEditPayload) => {
+            updateEditedMessage(data.conversationId, data.messageId, data.text);
+        }
 
         const handleTyping = ({ userId }: { userId: string }) => {
             setTypingUsers(prev => {
@@ -93,6 +97,7 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
         };
 
         socket.on("message:new", handleNewMessage);
+        socket.on("message:edited", handleEditMessage);
         socket.on("typing:start", handleTyping);
         socket.on("typing:stop", handleStopTyping);
 
@@ -115,6 +120,7 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
         return () => {
             socket.emit("conversation:leave", { conversationId: String(sel._id) });
             socket.off("message:new", handleNewMessage);
+            socket.off("message:edit", handleEditMessage);
             socket.off("typing:start", handleTyping);
             socket.off("typing:stop", handleStopTyping);
         };
@@ -144,7 +150,6 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
                             <ChatBubble
                                 message={msg as ITempMessage | IMessagePopulated}
                                 currentUserId={user?._id?.toString()}
-                                onEdit={(id: string, newText: string) => socket.emit('message:edit', { messageId: id, text: newText })}
                                 onDelete={deleteMessage}
                                 onReply={() => { }}
                                 onReact={(id, emoji) => socket.emit('message:reaction', { userId: user?._id?.toString(), messageId: String(id), emoji })} // 👈 socket.emit
