@@ -38,6 +38,7 @@ interface ChatStore {
     removeMessage: (conversationId: string, messageId: string) => void;
     updateMessageReactions: (conversationId: string, updated: IMessagePopulated) => void;
     clearTempMessages: (conversationId: string) => void;
+    updateEditedMessage: (conversationId: string, messageId: string, newText: string) => void;
 
     // conversation helpers
     updateLastMessage: (conversationId: string, msg: MessageType) => void;
@@ -208,6 +209,19 @@ const useChatStore = create<ChatStore>((set) => ({
                     ...state.messagesByConversation,
                     [conversationId]: current.map((m) =>
                         idOf(m) === idOf(updated) ? updated : m
+                    ),
+                },
+            };
+        }),
+
+    updateEditedMessage: (conversationId, messageId, newText) =>
+        set((state) => {
+            const current = state.messagesByConversation[conversationId] || [];
+            return {
+                messagesByConversation: {
+                    ...state.messagesByConversation,
+                    [conversationId]: current.map((m) =>
+                        idOf(m) === messageId ? { ...m, content: newText } : m
                     ),
                 },
             };
