@@ -5,7 +5,6 @@ import { create } from "zustand";
 import { getSocket } from "@/lib/socket/socketClient";
 import { MessageEditPayload, SocketEvents } from "@/server/socket/types/SocketEvents";
 import useChatStore from "./chat-store";
-import { IMessagePopulated } from "@/models/Message";
 interface SocketState {
     connected: boolean;
     currentConversationId: string | null;

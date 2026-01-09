@@ -143,6 +143,7 @@ export interface MessageSeenUpdatePayload {
 export interface MessageEditPayload {
     messageId: string;
     text: string;
+    conversationId: string;
 }
 
 export interface MessageDeletePayload {
@@ -297,7 +298,7 @@ export interface ServerToClientEvents {
     [SocketEvents.MESSAGE_DELIVERED_UPDATE]: (data: MessageDeliveredUpdatePayload) => void;
     [SocketEvents.MESSAGE_SEEN_UPDATE]: (data: MessageSeenUpdatePayload) => void;
     [SocketEvents.MESSAGE_EDIT]: (data: MessageEditPayload) => void;
-    [SocketEvents.MESSAGE_EDITED]: (data: IMessagePopulated) => void;
+    [SocketEvents.MESSAGE_EDITED]: (data: MessageEditPayload) => void;
     [SocketEvents.MESSAGE_DELETE]: (data: MessageDeletePayload) => void;
     [SocketEvents.MESSAGE_UNSEND]: (data: MessageUnsendPayload) => void;
     [SocketEvents.MESSAGE_REACTION]: (data: MessageReactionPayload) => void;
@@ -346,7 +347,7 @@ export interface ServerToClientEvents {
 export interface ClientToServerEvents {
     // Messages
     [SocketEvents.MESSAGE_SEND]: (data: MessageNewPayload) => void;
-    //[SocketEvents.MESSAGE_NEW]: (data: MessageNewPayload) => void;
+    [SocketEvents.MESSAGE_NEW]: (data: MessageNewPayload) => void;
     [SocketEvents.MESSAGE_RETRY]: (data: MessageRetryPayload) => void;
     [SocketEvents.MESSAGE_DELIVERED]: (data: MessageDeliveredPayload) => void;
     [SocketEvents.MESSAGE_SEEN]: (data: MessageSeenPayload) => void;
