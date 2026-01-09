@@ -117,7 +117,6 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
         };
 
         addMessage(tempId, tempMessage);
-        updateLastMessage(tempMessage.conversationId, tempMessage);
         setMsgText("");
 
         if (!isOnline || socket.disconnected) {
@@ -145,6 +144,7 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
             const message = await res.json();
 
             sendMessage(message);
+            updateLastMessage(String(sel._id), message);
             replaceTempMessage(String(sel._id), tempId, message);
         } catch (err) {
             console.error("Send message failed:", err);
@@ -210,14 +210,14 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
             <form className="w-full flex gap-3" onSubmit={handleSendMessage}>
                 <div className="flex-1">
                     {/* Reply or Edit Preview */}
-                    {(replyTo || editMessage) && (
-                        <div className="absolute -top-10 left-0 w-full bg-gray-100 dark:bg-gray-800 text-sm p-2 rounded-t-md flex justify-between">
+                    {(replyTo || editingMessage) && (
+                        <div className="absolute -top-8 left-3 w-lg bg-gray-100 dark:bg-gray-800 text-sm p-2 rounded-t-md flex justify-between">
                             {replyTo && <span>Replying to: {replyTo.content}</span>}
-                            {editMessage && <span>Editing: {editMessage.content}</span>}
+                            {editingMessage && <span>Editing: {editingMessage.content}</span>}
                             <button
                                 type="button"
                                 className="text-xs text-blue-500"
-                                onClick={replyTo ? onCancelReply : onCancelEdit}
+                                onClick={clearEditingMessage}
                             >
                                 Cancel
                             </button>
@@ -242,6 +242,9 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
                             if (e.key === "Enter" && !e.shiftKey) {
                                 e.preventDefault();
                                 handleSendMessage(e);
+                            }
+                            if (e.key === "Escape") {
+                                clearEditingMessage()
                             }
                         }}
                     />
