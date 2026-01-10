@@ -8,6 +8,10 @@ export interface IReaction {
     emoji: string;
     users: mongoose.Types.ObjectId[] | (mongoose.Types.ObjectId | IUser)[];
 }
+export interface IDeliveredTo {
+    userId: mongoose.Types.ObjectId;
+    at: Date;
+}
 
 export interface IMessage {
     _id: mongoose.Types.ObjectId;
@@ -21,8 +25,8 @@ export interface IMessage {
     timestamp: Date | string;
     conversationId: mongoose.Types.ObjectId;
     createdAt: Date;
-    seenBy?: mongoose.Types.ObjectId[];
-    deliveredTo?: mongoose.Types.ObjectId[];
+    seenBy?: IDeliveredTo[];
+    deliveredTo?: IDeliveredTo[];
 }
 
 // Fully populated version for FE usage
@@ -44,7 +48,13 @@ export interface MessageInputProps {
     editMessage?: IMessage;
     onCancelEdit?: () => void;
 }
-
+const DeliveredSchema = new Schema<IDeliveredTo>(
+    {
+        userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+        at: { type: Date, default: Date.now },
+    },
+    { _id: false }
+);
 
 const MessageSchema = new Schema<IMessage>({
     sender: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -65,14 +75,12 @@ const MessageSchema = new Schema<IMessage>({
     },
     timestamp: { type: Date, default: Date.now },
     seenBy: {
-        type: [Schema.Types.ObjectId],
-        ref: "User",
-        default: []
+        type: [DeliveredSchema],
+        default: [],
     },
     deliveredTo: {
-        type: [Schema.Types.ObjectId],
-        ref: "User",
-        default: []
+        type: [DeliveredSchema],
+        default: [],
     },
     conversationId: { type: Schema.Types.ObjectId, ref: "Conversation", required: true },
 });

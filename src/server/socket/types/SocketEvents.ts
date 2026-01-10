@@ -94,9 +94,11 @@ export type ValueOf<T> = T[keyof T];
 // ---------- MESSAGE ----------
 
 export interface MessageNewPayload {
+    _id: string;
     tempId?: string;
     conversationId: string;
     message: IMessagePopulated;
+    senderId: string;
 }
 
 export interface MessageSendAckPayload {
