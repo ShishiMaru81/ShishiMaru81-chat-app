@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import mongoose from "mongoose";
-import Message, { IMessage } from "@/models/Message";
+import Message from "@/models/Message";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/utils/auth/auth";
 import { connectToDatabase } from "@/lib/Db/db";
 
 export async function PATCH(
     req: NextRequest,
-    { params }: { params: { messageId: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
@@ -15,10 +14,10 @@ export async function PATCH(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { messageId } = params;
+        const { id } = await params;
         const { at } = await req.json();
         await connectToDatabase();
-        const message = await Message.findById(messageId);
+        const message = await Message.findById(id);
         if (!message) {
             return NextResponse.json({ error: "Message not found" }, { status: 404 });
         }

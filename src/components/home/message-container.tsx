@@ -82,11 +82,6 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
 
             if (!currentUserId) return;
 
-            // Only receivers mark delivered
-            if (data.senderId !== currentUserId) {
-                markDelivered(data._id, Date.now());
-            }
-
             updateLastMessage(
                 String(sel._id),
                 data as unknown as IMessagePopulated
@@ -96,6 +91,10 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
                 String(sel._id),
                 data as unknown as IMessagePopulated
             );
+            // Only receivers mark delivered
+            if (data.sender !== currentUserId) {
+                markDelivered(data._id, Date.now());
+            }
         };
         const handleEditMessage = (data: MessageEditPayload) => {
             updateEditedMessage(data.conversationId, data.messageId, data.text);
