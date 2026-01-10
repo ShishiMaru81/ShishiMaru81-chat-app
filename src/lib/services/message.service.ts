@@ -24,7 +24,6 @@ export async function createMessage(data: CreateMessageInput, senderId: string) 
     const saved = await messageRepo.saveMessage(toSave);
     conversation.lastMessage = saved;
     await conversation.save();
-    // io.to(data.conversationId).emit("message:new", saved);
 
     return saved;
 }

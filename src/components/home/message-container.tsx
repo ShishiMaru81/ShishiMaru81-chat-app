@@ -11,6 +11,7 @@ import { ITempMessage } from "@/models/TempMessage";
 import { deleteMessage } from "@/lib/utils/api";
 import useSocketStore from "@/store/useSocketStore";
 import { MessageEditPayload, MessageNewPayload } from "@/server/socket/types/SocketEvents";
+import { markDelivered } from "@/lib/services/delivery.service";
 
 
 interface MessageContainerProps {
@@ -77,9 +78,24 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
         // JOIN
 
         const handleNewMessage = (data: MessageNewPayload) => {
-            // If your store expects IMessagePopulated:
-            updateLastMessage(String(sel._id), data as unknown as IMessagePopulated);
-            addMessage(String(sel._id), data as unknown as IMessagePopulated);
+            const currentUserId = user?._id?.toString();
+
+            if (!currentUserId) return;
+
+            // Only receivers mark delivered
+            if (data.senderId !== currentUserId) {
+                markDelivered(data._id, Date.now());
+            }
+
+            updateLastMessage(
+                String(sel._id),
+                data as unknown as IMessagePopulated
+            );
+
+            addMessage(
+                String(sel._id),
+                data as unknown as IMessagePopulated
+            );
         };
         const handleEditMessage = (data: MessageEditPayload) => {
             updateEditedMessage(data.conversationId, data.messageId, data.text);
