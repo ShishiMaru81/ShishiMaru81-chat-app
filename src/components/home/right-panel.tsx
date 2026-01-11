@@ -1,4 +1,5 @@
 "use client";
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Video, X } from "lucide-react";
 import MessageInput from "./message-input";
@@ -7,50 +8,95 @@ import ChatPlaceHolder from "@/components/home/chat-placeholder";
 import GroupMembersDialog from "./group-members-dialog";
 import useChatStore from "@/store/chat-store";
 import { useSession } from "next-auth/react";
-//import { useConversationId } from "@/hooks/useConversationId";
+import { IUser } from "@/models/User";
+
+// type guard
+function isUser(p: unknown): p is IUser {
+    return typeof p === "object" && p !== null && "email" in p;
+}
 
 const RightPanel = () => {
     const { data: session } = useSession();
     const currentUserEmail = session?.user?.email;
-    const { selectedConversation, setSelectedConversation } = useChatStore()
-    if (!selectedConversation) return <ChatPlaceHolder />;
-    //console.log(selectedConversation)
-    const otherUser = selectedConversation.participants.find(
-        (user) => user.email !== currentUserEmail
+
+    const conversations = useChatStore((s) => s.conversations);
+    const selectedConversationId = useChatStore(
+        (s) => s.selectedConversationId
     );
-    const conversationName = selectedConversation.groupName || otherUser?.username || "Unknown";
+    const setSelectedConversation = useChatStore(
+        (s) => s.setSelectedConversation
+    );
+
+    // 🔑 derive selected conversation (SINGLE SOURCE OF TRUTH)
+    const selectedConversation = conversations.find(
+        (c) => String(c._id) === selectedConversationId
+    );
+
+    if (!selectedConversation) {
+        return <ChatPlaceHolder />;
+    }
+
+    // safely derive other user
+    const otherUser = selectedConversation.participants.find(
+        (p): p is IUser =>
+            isUser(p) && p.email !== currentUserEmail
+    );
+
+    const conversationName = selectedConversation.isGroup
+        ? selectedConversation.groupName
+        : otherUser?.username || "Unknown";
+
+    const avatarSrc =
+        selectedConversation.image ||
+        otherUser?.profilePicture ||
+        "/placeholder.png";
+
     return (
-        <div className='w-3/4 flex flex-col'>
-            <div className='w-full sticky top-0 z-50'>
-                {/* Header */}
-                <div className='flex justify-between bg-gray-primary p-3'>
-                    <div className='flex gap-3 items-center'>
+        <div className="w-3/4 flex flex-col">
+            {/* Header */}
+            <div className="w-full sticky top-0 z-50">
+                <div className="flex justify-between bg-gray-primary p-3">
+                    <div className="flex gap-3 items-center">
                         <Avatar>
-                            <AvatarImage src={selectedConversation.image || otherUser?.profilePicture || "/placeholder.png"} className='object-cover' />
+                            <AvatarImage
+                                src={avatarSrc}
+                                className="object-cover"
+                            />
                             <AvatarFallback>
-                                <div className='animate-pulse bg-gray-tertiary w-full h-full rounded-full' />
+                                <div className="animate-pulse bg-gray-tertiary w-full h-full rounded-full" />
                             </AvatarFallback>
                         </Avatar>
-                        <div className='flex flex-col'>
+
+                        <div className="flex flex-col">
                             <p>{conversationName}</p>
-                            {selectedConversation.isGroup && <GroupMembersDialog />}
+                            {selectedConversation.isGroup && (
+                                <GroupMembersDialog />
+                            )}
                         </div>
                     </div>
 
-                    <div className='flex items-center gap-7 mr-5'>
-                        <a href='/video-call' target='_blank'>
+                    <div className="flex items-center gap-7 mr-5">
+                        <a href="/video-call" target="_blank">
                             <Video size={23} />
                         </a>
-                        <X size={16} className='cursor-pointer' onClick={() => setSelectedConversation(null)} />
+                        <X
+                            size={16}
+                            className="cursor-pointer"
+                            onClick={() => setSelectedConversation(null)}
+                        />
                     </div>
                 </div>
             </div>
+
             {/* CHAT MESSAGES */}
-            <MessageContainer conversationId={String(selectedConversation._id)} />
+            <MessageContainer
+                conversationId={String(selectedConversation._id)}
+            />
 
             {/* INPUT */}
             <MessageInput onSend={() => { }} />
         </div>
     );
 };
+
 export default RightPanel;
