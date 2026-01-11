@@ -34,7 +34,7 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     const { addMessage, updateLastMessage, replaceTempMessage, editingMessage, clearEditingMessage, updateEditedMessage } = useChatStore();
-    const sel = useChatStore((s) => s.selectedConversation);
+    const sel = useChatStore((s) => s.selectedConversationId);
     const isOnline = useNetworkStatus();
     const { addToQueue } = useOfflineStore();
     const { sendMessage } = useSocketStore();
@@ -79,7 +79,7 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
     // 📤 Send text message
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!msgText.trim() || !me || !sel?._id || isRateLimited) return;
+        if (!msgText.trim() || !me || !sel || isRateLimited) return;
 
         if (editingMessage) {
             const res = await fetch(`/api/messages/${editingMessage._id}/edit`, {
@@ -92,11 +92,11 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
             });
             if (!res.ok) throw new Error("Failed to edit message");
             socket.emit("message:edit", {
-                conversationId: String(sel._id),
+                conversationId: String(sel),
                 messageId: String(editingMessage._id),
                 text: msgText.trim(),
             });
-            updateEditedMessage(String(sel._id), String(editingMessage._id), msgText.trim());
+            updateEditedMessage(String(sel), String(editingMessage._id), msgText.trim());
             clearEditingMessage();
             setMsgText("");
             return;
@@ -107,7 +107,7 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
         const tempMessage: ITempMessage = {
             _id: tempId,
             isDeleted: false,
-            conversationId: String(sel._id),
+            conversationId: String(sel),
             senderId: String(me._id),
             content: msgText.trim(),
             messageType: "text",
@@ -131,7 +131,7 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     content: tempMessage.content,
-                    conversationId: sel._id,
+                    conversationId: sel,
                 }),
             });
 
@@ -144,8 +144,8 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
             const message = await res.json();
 
             sendMessage(message);
-            updateLastMessage(String(sel._id), message);
-            replaceTempMessage(String(sel._id), tempId, message);
+            updateLastMessage(String(sel), message);
+            replaceTempMessage(String(sel), tempId, message);
         } catch (err) {
             console.error("Send message failed:", err);
             toast.error("Message failed to send");
@@ -162,7 +162,7 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     content: result.url,
-                    conversationId: sel._id,
+                    conversationId: sel,
                     senderId: me._id,
                     messageType: "image",
                 }),
@@ -171,7 +171,7 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
             if (!res.ok) throw new Error("Failed to send image message");
 
             const message = await res.json();
-            addMessage(String(sel._id), message);
+            addMessage(String(sel), message);
             sendMessage(message);
             toast.success("Image sent successfully!");
             setShowImageUpload(false);
@@ -234,8 +234,8 @@ const MessageInput = ({ replyTo, onCancelReply, editMessage, onCancelEdit }: Mes
                         value={msgText}
                         onChange={(e) => {
                             setMsgText(e.target.value);
-                            if (sel?._id && !isRateLimited)
-                                debouncedTyping(String(sel._id));
+                            if (sel && !isRateLimited)
+                                debouncedTyping(String(sel));
                         }}
                         disabled={isRateLimited}
                         onKeyDown={(e) => {
