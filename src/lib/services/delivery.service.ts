@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-import { getSocket } from "../socket/socketClient";
 
 export async function markDelivered(messageId: string, at: Date | number) {
     if (!mongoose.Types.ObjectId.isValid(messageId)) return null;
@@ -13,7 +12,6 @@ export async function markDelivered(messageId: string, at: Date | number) {
         const err = await res.json();
         throw new Error(err.error || "Failed to mark delivered");
     }
-    const socket = getSocket();
     // socket.emit("message:delivered", { messageId, userId, at });
     return await res.json();
 }
