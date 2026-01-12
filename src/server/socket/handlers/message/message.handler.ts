@@ -31,15 +31,21 @@ export function registerMessageHandlers(io: Server, socket: Socket) {
      * Payload already contains canonical DB message
      * Socket server just delivers it
      */
-    socket.on(SocketEvents.MESSAGE_SEND, (message, ack) => {
-        if (!message?.conversationId) {
+    socket.on(SocketEvents.MESSAGE_SEND, (message, ack, members) => {
+        const conversationId = message.conversationId
+        if (!conversationId) {
             return ack?.({ ok: false, error: "Invalid message payload" });
         }
         const room = `conversation:${message.conversationId}`;
-
+        members.forEach((userId: string) => {
+            io.to(`user:${userId}`).emit(SocketEvents.MESSAGE_NEW, {
+                conversationId,
+                message,
+            });
+        });
         io.to(room).emit(SocketEvents.MESSAGE_NEW, message);
         io.to("admins").emit("dashboard:update", { totalMessagesToday: 1 });
-        if (ack) ack({ status: "ok", message: "Delivered" });
+        if (ack) ({ status: "ok", message: "Delivered" });
     });
 
     /**
