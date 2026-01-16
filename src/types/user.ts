@@ -1,13 +1,16 @@
-export interface AppUser {
-    name?: string | null;
-    oauthImage?: string | null;
-    imageKitUrl?: string | null;
-    isOnline?: boolean;
-}
-export interface IUser {
+import { IConversation } from "@/models/Conversation";
+
+export interface ClientUser {
     _id: string;
+    username: string;
     email: string;
-    username?: string;
+    isOnline: boolean;
     profilePicture?: string;
-    isOnline?: boolean;
+    role: 'user' | 'moderator' | 'admin';
+    status: 'active' | 'banned';
+    lastSeen: Date;
+    isVerified: Date;
+    conversations: IConversation;
+    createdAt: Date;
+    updatedAt: Date;
 }

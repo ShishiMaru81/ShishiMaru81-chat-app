@@ -4,10 +4,11 @@ import { IMessage, IMessagePopulated } from "@/models/Message";
 import { ITempMessage } from "@/models/TempMessage";
 type MessageType = IMessagePopulated | ITempMessage;
 import { ClientConversation } from "@/types/client-conversation";
+import { IConversationPopulated } from "@/models/Conversation";
 interface ChatStore {
     selectedConversationId: string | null;
     currentUserId: string | null;
-    selectedConversation: ClientConversation | null;
+    selectedConversation: IConversationPopulated | null;
     conversations: ClientConversation[];
     messagesByConversation: Record<string, MessageType[]>;
     hasMoreByConversation: Record<string, boolean>;
@@ -15,7 +16,7 @@ interface ChatStore {
     typingByConversation: Record<string, string[]>; // conversationId -> userIds
 
     // setters
-    setSelectedConversation: (conversation: ClientConversation | null) => void;
+    setSelectedConversation: (conversation: IConversationPopulated | null) => void;
     setConversations: (convs: ClientConversation[]) => void;
     setHasMore: (conversationId: string, val: boolean) => void;
     setOnlineUsers: (users: string[]) => void;
@@ -76,7 +77,7 @@ const useChatStore = create<ChatStore>((set) => ({
 
     setSelectedConversation: (conv) =>
         set({
-            selectedConversationId: conv?._id ?? null,
+            selectedConversationId: String(conv?._id) ?? null,
             selectedConversation: conv,
         }),
 
