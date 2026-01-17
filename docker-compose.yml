@@ -8,8 +8,14 @@ services:
     env_file:
       - .env
     depends_on:
-      - socket
-      - mongo
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      socket:
+        condition: service_started
+    networks:
+      - chatnet
 
   socket:
     build:
@@ -20,17 +26,45 @@ services:
     env_file:
       - .env
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - chatnet
 
   mongo:
     image: mongo:6
     restart: always
     ports:
       - "27017:27017"
-    env_file:
-      - .env
     volumes:
       - mongo_data:/data/db
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chatnet
+
+  redis:
+    image: redis:7
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - chatnet
 
 volumes:
   mongo_data:
+
+
+networks:
+  chatnet:
+    driver: bridge
