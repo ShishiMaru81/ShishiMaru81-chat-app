@@ -15,7 +15,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useOfflineStore } from '@/store/offline-store';
 import { useNetworkStatus } from '@/lib/hooks/useNetworkStatus';
 import { useRateLimitHandler } from "@/lib/hooks/useRateLimitHandler";
-import { MessageInputProps } from "@/models/Message";
+import { IMessagePopulated, MessageInputProps } from "@/models/Message";
 import useSocketStore from "@/store/useSocketStore";
 
 // 🧠 Small debounce util
@@ -39,11 +39,11 @@ const MessageInput = ({ replyTo }: MessageInputProps) => {
     const { addToQueue } = useOfflineStore();
     const { sendMessage } = useSocketStore();
     const socket = getSocket();
-    // ✅ Rate limit handler
+    //  Rate limit handler
     const { isRateLimited, timeLeft, triggerRateLimit } = useRateLimitHandler(5000);
     const conversationmembers = selectedConversation?.participants.map(m => m._id);
 
-    // ✅ Fetch logged-in user once
+    //  Fetch logged-in user once
     useEffect(() => {
         const fetchMe = async () => {
             try {

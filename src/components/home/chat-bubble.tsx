@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { ReactionBar } from "../chat/reaction-bar";
 import { IUser } from "@/models/User";
-import { Check, CheckCheck } from "lucide-react";
+//import { Check, CheckCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface ChatBubbleProps {
@@ -215,7 +215,7 @@ const ChatBubble = ({
             {/* Avatar only for others in group chats */}
             {!isMine && selectedConversation?.isGroup && isUser(message.sender) && (
                 <ChatBubbleAvatar
-                    isGroup={selectedConversation.isGroup}
+                    isGroup={selectedConversation?.isGroup}
                     isMember={true}
                     sender={message.sender}
                 />

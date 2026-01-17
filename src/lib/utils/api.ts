@@ -1,8 +1,6 @@
 // lib/api.ts
 //import axios from "axios";
 
-import { socket } from "../socket/socketClient";
-
 // Client-side call to fetch user info from your API
 export async function getMe() {
     const res = await fetch("/api/me");

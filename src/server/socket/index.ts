@@ -17,6 +17,8 @@ export async function initSocket(server: any) {
     io.use(socketAuth);
 
     io.on("connection", (socket) => {
+        const userId = socket.data.userId;
+        socket.join(`user:${userId}`);
         console.log("🔌 socket connected:", socket.id);
         adminHandler(io, socket, redis);
         presenceHandler(io, socket);

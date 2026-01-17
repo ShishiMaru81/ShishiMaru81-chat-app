@@ -98,7 +98,7 @@ export interface MessageNewPayload {
     tempId?: string;
     conversationId: string;
     message: IMessagePopulated;
-    senderId: string;
+    sender: string;
 }
 
 export interface MessageSendAckPayload {
@@ -348,7 +348,10 @@ export interface ServerToClientEvents {
 
 export interface ClientToServerEvents {
     // Messages
-    [SocketEvents.MESSAGE_SEND]: (data: MessageNewPayload) => void;
+    [SocketEvents.MESSAGE_SEND]: (payload: {
+        data: MessageNewPayload;
+        conversationMembers: string[];
+    }) => void;
     [SocketEvents.MESSAGE_NEW]: (data: MessageNewPayload) => void;
     [SocketEvents.MESSAGE_RETRY]: (data: MessageRetryPayload) => void;
     [SocketEvents.MESSAGE_DELIVERED]: (data: MessageDeliveredPayload) => void;

@@ -18,7 +18,7 @@ interface SocketState {
 
     startTyping: (conversationId: string, userId: string) => void;
     stopTyping: (conversationId: string, userId: string) => void;
-    sendMessage: (payload: any) => void;
+    sendMessage: (payload: any, conversationmembers: any) => void;
     editMessageUpdate: (msg: MessageEditPayload) => void;
 }
 
@@ -65,9 +65,9 @@ const useSocketStore = create<SocketState>((set, get) => ({
         socket.emit(SocketEvents.TYPING_STOP, { conversationId, userId });
     },
 
-    sendMessage: (payload) => {
+    sendMessage: (payload, conversationmembers) => {
         const socket = getSocket();
-        socket.emit(SocketEvents.MESSAGE_SEND, payload);
+        socket.emit(SocketEvents.MESSAGE_SEND, { data: payload, conversationMembers: conversationmembers });
 
 
         // Optimistic UI insert

@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/providers/theme-provider";
 import { SessionProvider } from "next-auth/react";
 import { Toaster } from "@/components/ui/sonner"
 import { UserProvider } from "@/context/UserContext";
+import { SocketProvider } from "@/providers/socket-provider";
 
 
 // export const metadata: Metadata = {
@@ -26,7 +27,9 @@ export default function RootLayout({
         <ThemeProvider attribute='class' defaultTheme='system' enableSystem disableTransitionOnChange>
           <SessionProvider>
             <UserProvider>
-              {children}
+              <SocketProvider>
+                {children}
+              </SocketProvider>
               <Toaster />
             </UserProvider>
           </SessionProvider>
