@@ -21,14 +21,14 @@ export default function AdminDashboard() {
     useEffect(() => {
         const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL, {
             path: "/api/socket",
-            autoConnect: false, // you control when to connect
+            autoConnect: true, // you control when to connect
             transports: ["websocket"], // prefer ws
             withCredentials: true,
         });
 
-        socket.on("connection", () => {
+        socket.on("connect", () => {
             console.log("✅ Connected to socket:", socket.id);
-            //socket.emit("admin:join");
+            socket.emit("admin:join");
         });
 
         socket.on("connect_error", (err) => {

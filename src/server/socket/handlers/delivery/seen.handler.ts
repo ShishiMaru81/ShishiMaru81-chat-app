@@ -6,6 +6,6 @@ export const SeenHandler = (_io: Server, socket: Socket) => {
     socket.on(SocketEvents.MESSAGE_SEEN, (payload) => {
         const { conversationId, messageId } = payload;
         if (!conversationId || !messageId) return;
-        socket.to(conversationId).emit(SocketEvents.MESSAGE_SEEN, { messageId });
+        socket.to(`conversation:${conversationId}`).emit(SocketEvents.MESSAGE_SEEN_UPDATE, { messageId });
     });
 }

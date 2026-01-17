@@ -48,9 +48,9 @@ export function connectSocket(authToken?: string) {
     const s = getSocket();
 
     if (authToken) {
-        s.io.opts.extraHeaders = {
-            ...(s.io.opts.extraHeaders || {}),
-            Authorization: `Bearer ${authToken}`,
+        s.auth = {
+            ...(s.auth || {}),
+            token: authToken,
         };
     }
 

@@ -16,7 +16,7 @@ class OfflineMessageDB extends Dexie {
     constructor() {
         super('OfflineMessageDB');
         this.version(1).stores({
-            offlineMessages: '++id,tempId,conversationId,createdAt'
+            offlineMessages: '++id,tempId,conversationId,timestamp'
         });
     }
 }

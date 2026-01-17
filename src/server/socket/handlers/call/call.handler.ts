@@ -6,7 +6,7 @@ import {
     CallOfferPayload,
     CallAnswerPayload,
     CallEndPayload,
-    CallBusyPayload,
+    CallRingingPayload,
     SocketEvents,
 } from "@/server/socket/types/SocketEvents";
 
@@ -40,7 +40,7 @@ export function callHandler(io: IO, socket: Socket) {
         });
     });
 
-    socket.on(SocketEvents.CALL_BUSY, ({ to }: CallBusyPayload) => {
+    socket.on(SocketEvents.CALL_BUSY, ({ to }: CallRingingPayload) => {
         io.to(to).emit(SocketEvents.CALL_BUSY, {
             from: socket.data.user._id,
             to,

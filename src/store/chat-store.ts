@@ -77,7 +77,7 @@ const useChatStore = create<ChatStore>((set) => ({
 
     setSelectedConversation: (conv) =>
         set({
-            selectedConversationId: String(conv?._id) ?? null,
+            selectedConversationId: conv?._id ? String(conv._id) : null,
             selectedConversation: conv,
         }),
 

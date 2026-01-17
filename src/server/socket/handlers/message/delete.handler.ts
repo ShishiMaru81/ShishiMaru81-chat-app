@@ -5,6 +5,7 @@ export function DeleteHandler(io: Server, socket: Socket) {
     socket.on(SocketEvents.MESSAGE_DELETE, (payload) => {
         const { conversationId, messageId } = payload;
         if (!conversationId || !messageId) return;
-        socket.to(conversationId).emit(SocketEvents.MESSAGE_DELETE, { messageId });
+        // TODO: Verify socket.data.userId owns this message before broadcasting
+        +        socket.to(`conversation:${conversationId}`).emit(SocketEvents.MESSAGE_DELETE, { messageId });
     });
 }
