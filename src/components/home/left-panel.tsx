@@ -11,6 +11,7 @@ import UserProfile from "./userProfile";
 import { getConversations } from "@/lib/utils/api";
 import useChatStore from "@/store/chat-store";
 import { IUser } from "@/models/User";
+import { IConversationPopulated } from "@/models/Conversation";
 
 // type guard
 function isUser(p: unknown): p is IUser {
@@ -90,7 +91,7 @@ const LeftPanel = () => {
         );
 
         if (existingDM) {
-            setSelectedConversation(existingDM);
+            setSelectedConversation(existingDM as unknown as IConversationPopulated);
         }
     };
 
@@ -156,7 +157,7 @@ const LeftPanel = () => {
                     filteredConversations.map((c) => (
                         <Conversation
                             key={String(c._id)}
-                            conversation={c}
+                            conversation={c as unknown as IConversationPopulated}
                         />
                     ))}
             </div>

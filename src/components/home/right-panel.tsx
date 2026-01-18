@@ -38,9 +38,9 @@ const RightPanel = () => {
 
     // safely derive other user
     const otherUser = selectedConversation.participants.find(
-        (p): p is IUser =>
+        (p) =>
             isUser(p) && p.email !== currentUserEmail
-    );
+    ) as IUser | undefined;
 
     const conversationName = selectedConversation.isGroup
         ? selectedConversation.groupName

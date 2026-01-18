@@ -1,14 +1,14 @@
-import { AppUser } from "@/types/user";
+import { ClientUser } from "@/types/user";
 import Image from "next/image";
 
 interface UserAvatarProps {
-    user: AppUser;
+    user: ClientUser;
     size?: number;
 }
 
 const UserAvatar: React.FC<UserAvatarProps> = ({ user, size = 40 }) => {
-    const src = user.imageKitUrl || user.oauthImage || null;
-    const initials = user.name?.charAt(0).toUpperCase() || "U";
+    const src = user.profilePicture;
+    const initials = user.username?.charAt(0).toUpperCase() || "U";
 
     return (
         <div
@@ -18,7 +18,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({ user, size = 40 }) => {
             {src ? (
                 <Image
                     src={src}
-                    alt={user.name || "User"}
+                    alt={user.username || "User"}
                     fill
                     className="object-cover"
                 />

@@ -8,6 +8,7 @@ import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import UserAvatar from "./UserAvatar";
 import { useUser } from "@/context/UserContext";
+import { ClientUser } from "@/types/user";
 interface ProfilePictureUploadProps {
     onUpdate?: (imageUrl: string) => void;
     className?: string;
@@ -17,13 +18,7 @@ export const ProfilePictureUpload = ({ onUpdate, className }: ProfilePictureUplo
     const { data: session, update } = useSession();
     const [isUpdating, setIsUpdating] = useState(false);
     const [showUpload, setShowUpload] = useState(false);
-    const { user } = useUser();
-
-    const formattedUser = {
-        name: user?.username,
-        oauthImage: null,
-        imageKitUrl: user?.profilePicture,
-    };
+    const { user } = useUser() as { user: ClientUser | null };
 
     const handleImageUpload = async (result: { url?: string; fileId?: string }) => {
         if (!result.url) return;
@@ -68,10 +63,12 @@ export const ProfilePictureUpload = ({ onUpdate, className }: ProfilePictureUplo
     return (
         <div className={`relative ${className}`}>
             <div className="relative group">
-                <UserAvatar
-                    user={formattedUser}
-                    size={150}
-                />
+                {user && (
+                    <UserAvatar
+                        user={user}
+                        size={150}
+                    />
+                )}
 
                 <Button
                     size="sm"
@@ -82,6 +79,7 @@ export const ProfilePictureUpload = ({ onUpdate, className }: ProfilePictureUplo
                     <Camera size={16} />
                 </Button>
             </div>
+
 
             {showUpload && (
                 <div className="mt-4 p-4 border rounded-lg bg-background">

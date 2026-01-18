@@ -8,12 +8,12 @@ import { useSession } from "next-auth/react";
 import { getAvatarUrl } from "@/lib/utils/imagekit";
 import { useUser } from "@/context/UserContext";
 import useChatStore from "@/store/chat-store";
-import { IConversation } from "@/models/Conversation";
+import { IConversation, IConversationPopulated } from "@/models/Conversation";
 import { IUser } from "@/models/User";
 
 
 type ConversationProps = {
-    conversation: IConversation & { unreadCount?: number };
+    conversation: IConversationPopulated & { unreadCount?: number };
 };
 
 // type guard
