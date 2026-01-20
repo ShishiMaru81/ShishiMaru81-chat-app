@@ -21,9 +21,10 @@ import { ReactionBar } from "../chat/reaction-bar";
 import { IUser } from "@/models/User";
 //import { Check, CheckCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ClientMessage } from "@/types/client-message";
 
 interface ChatBubbleProps {
-    message: ITempMessage | IMessage | IMessagePopulated;
+    message: ITempMessage | ClientMessage;
     currentUserId: string;
     onDelete: (msgId: string) => void;
     onReply: (msg: IMessagePopulated | IMessage | ITempMessage) => void;
@@ -74,20 +75,20 @@ const ChatBubble = ({
     // );
 
     const isMine =
-        typeof message.sender === "string"
-            ? message.sender === currentUserId
-            : isUser(message.sender) && message.sender._id?.toString() === currentUserId;
+        typeof message.senderId === "string"
+            ? message.senderId === currentUserId
+            : isUser(message.senderId) && message.senderId === currentUserId;
 
     // reactions: { emoji: string; users: (string | {_id:string})[] }[]
     const reactions =
-        (message as IMessagePopulated).reactions as
+        (message).reactions as
         | { emoji: string; users: (string | { _id: string })[] }[]
         | undefined;
 
     const hasReactions = reactions && reactions.length > 0;
 
     const getRepliedPreview = () => {
-        const replied = (message as IMessagePopulated).repliedTo;
+        const replied = (message).repliedTo;
 
         if (!replied) return null;
         if (!isPopulatedMessage(replied)) {
@@ -144,7 +145,7 @@ const ChatBubble = ({
             );
         }
 
-        const type = (message as IMessagePopulated).messageType as
+        const type = (message).messageType as
             | "text"
             | "image"
             | "video"
@@ -252,14 +253,14 @@ const ChatBubble = ({
                             ? "bg-gradient-to-br from-indigo-500 to-purple-600 text-white"
                             : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100"
                         }
-                        ${(message as IMessagePopulated).messageType !== "text"
+                        ${(message).messageType !== "text"
                             ? "p-0 bg-transparent shadow-none"
                             : "p-3 shadow-md"
                         }
                     `}
                 >
                     {/* Reply preview (full: name + snippet) */}
-                    {(message as IMessagePopulated).repliedTo && getRepliedPreview()}
+                    {(message).repliedTo && getRepliedPreview()}
 
                     {/* Main content */}
                     {renderContent()}
@@ -315,7 +316,7 @@ const ChatBubble = ({
                     className={`text-[10px] text-gray-400 mt-1 block ${isMine ? "text-right" : "text-left"
                         } w-full`}
                 >
-                    {new Date(message.timestamp).toLocaleTimeString([], {
+                    {new Date(message.createdAt).toLocaleTimeString([], {
                         hour: "2-digit",
                         minute: "2-digit",
                     })}

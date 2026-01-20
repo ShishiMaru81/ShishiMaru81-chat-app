@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import useChatStore from "@/store/chat-store";
 import { socket } from "@/lib/socket/socketClient";
-import { IMessagePopulated } from "@/models/Message";
+//import { IMessagePopulated } from "@/models/Message";
 import ChatBubble from "./chat-bubble";
 import ChatDaySeparator from "./ChatDaySeparator";
 import { useUser } from "@/context/UserContext";
@@ -12,6 +12,7 @@ import { deleteMessage } from "@/lib/utils/api";
 import useSocketStore from "@/store/useSocketStore";
 import { MessageEditPayload, MessageNewPayload } from "@/server/socket/types/SocketEvents";
 import { markDelivered } from "@/lib/services/delivery.service";
+import { ClientMessage } from "@/types/client-message";
 
 
 interface MessageContainerProps {
@@ -34,7 +35,7 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
             const res = await fetch(
                 `/api/messages?conversationId=${sel}&cursor=${cursor || ""}`
             );
-            const data = await res.json() as IMessagePopulated[];
+            const data = await res.json() as ClientMessage[];
             const redata = data.reverse();
             if (redata.length < 20) setHasMore(String(sel), false);
             setMessages(String(sel), redata, !!cursor);
@@ -78,13 +79,14 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
         // JOIN
 
         const handleNewMessage = (data: MessageNewPayload) => {
+            console.log('handleNewMessage', data);
             const currentUserId = user?._id?.toString();
 
             if (!currentUserId) return;
 
             updateLastMessage(
                 String(sel),
-                data as unknown as IMessagePopulated
+                data as unknown as ClientMessage
             );
 
             addMessage(
@@ -157,16 +159,16 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
             <div className="mx-12 flex flex-col gap-3 h-full">
                 <div ref={topRef} />
                 {user && (messagesByConversation[conversationId] ?? []).map((msg) => {
-                    const msgDate = new Date(msg.timestamp);
+                    const msgDate = new Date(msg.createdAt);
                     const dayKey = msgDate.toDateString();
                     const showSeparator = lastDate !== dayKey;
                     lastDate = dayKey;
-
+                    console.log(msg)
                     return (
                         <div key={String(msg._id)}>
                             {showSeparator && <ChatDaySeparator date={msgDate} />}
                             <ChatBubble
-                                message={msg as ITempMessage | IMessagePopulated}
+                                message={msg as ITempMessage | ClientMessage}
                                 currentUserId={user?._id?.toString()}
                                 onDelete={deleteMessage}
                                 onReply={() => { }}

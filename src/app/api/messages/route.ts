@@ -4,6 +4,8 @@ import { CreateMessageSchema } from "@/lib/validators/message.schema";
 import { getPaginatedMessages } from "@/lib/repositories/message.repo";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/utils/auth/auth";
+import { normalizeMessage } from "@/server/normalizers/message.normalizer";
+
 //import { messageRateLimiter } from "@/lib/utils/rateLimiter";
 
 export async function POST(req: NextRequest) {
@@ -19,8 +21,9 @@ export async function POST(req: NextRequest) {
         const requestBody = await req.json();
         const parsed = CreateMessageSchema.parse(requestBody);
         const message = await handleCreateMessage(parsed, senderId);
+        const clientMessage = normalizeMessage(message);
 
-        return NextResponse.json(message, { status: 201 });
+        return NextResponse.json(clientMessage, { status: 201 });
     } catch (error) {
         console.error("❌ Message POST error:", error);
 
@@ -38,8 +41,9 @@ export async function GET(req: NextRequest) {
         const cursor = searchParams.get("cursor") || undefined;
 
         const messages = await getPaginatedMessages(conversationId, cursor);
+        const clientMessages = messages.map(normalizeMessage);
         // Always return an array, even if empty:
-        return NextResponse.json(messages, { status: 200 });
+        return NextResponse.json(clientMessages, { status: 200 });
     } catch (err) {
         console.error(err);
         // Return an empty array instead of no body:

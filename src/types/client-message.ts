@@ -7,20 +7,19 @@ export interface ClientReaction {
 }
 
 export interface ClientMessage {
-    _id: string;
-    conversationId: string;
-    senderId: string;
-    sender?: IUser; // optional populated
-    content: string;
-    messageType: "text" | "image" | "file" | "system";
-    reactions: ClientReaction[];
+    id: string
+    conversationId: string
+    senderId: string
+    content: string | null
+    type: "text" | "image" | "file" | "system"
 
-    deliveredTo: string[];
-    seenBy: string[];
+    createdAt: string        // ISO string (single source of truth)
+    editedAt?: string
+    deletedAt?: string
 
-    isEdited: boolean;
-    isDeleted: boolean;
+    reactions: ClientReaction[]
+    deliveredTo: string[]
+    seenBy: string[]
 
-    createdAt: string; // ISO string
-    updatedAt?: string;
+    status?: "sending" | "sent" | "failed" // client-only
 }

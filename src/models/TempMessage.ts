@@ -15,5 +15,5 @@ export interface ITempMessage {
     messageType: "text" | "image";
     status: "pending" | "queued";
     sender: IUser;
-    timestamp: string | Date;
+    createdAt: Date;
 }

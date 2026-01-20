@@ -1,5 +1,6 @@
 import { Server, Socket } from "socket.io";
 import { MessageNewPayload, SocketEvents } from "./../../types/SocketEvents.js";
+import { normalizeMessage } from "@/server/normalizers/message.normalizer.js";
 
 export function registerMessageHandlers(io: Server, socket: Socket) {
     const conversationRoom = (id: string) => `conversation:${id}`;
@@ -40,7 +41,7 @@ export function registerMessageHandlers(io: Server, socket: Socket) {
         conversationMembers.forEach((userId: string) => {
             io.to(`user:${userId}`).emit(SocketEvents.MESSAGE_NEW, {
                 conversationId,
-                message: data,
+                message: normalizeMessage(data),
             });
         });
         io.to("admins").emit("dashboard:update", { totalMessagesToday: 1 });

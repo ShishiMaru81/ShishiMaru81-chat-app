@@ -22,9 +22,7 @@ export interface IMessage {
     isEdited: boolean;
     isDeleted: boolean;
     messageType: MessageType;
-    timestamp: Date | string;
     conversationId: mongoose.Types.ObjectId;
-    createdAt: Date;
     seenBy?: IDeliveredTo[];
     deliveredTo?: IDeliveredTo[];
 }
@@ -73,7 +71,6 @@ const MessageSchema = new Schema<IMessage>({
         enum: ["text", "image", "video", "audio", "voice", "file"],
         default: "text",
     },
-    timestamp: { type: Date, default: Date.now },
     seenBy: {
         type: [DeliveredSchema],
         default: [],
@@ -83,6 +80,8 @@ const MessageSchema = new Schema<IMessage>({
         default: [],
     },
     conversationId: { type: Schema.Types.ObjectId, ref: "Conversation", required: true },
+}, {
+    timestamps: true,
 });
 
 export default mongoose.models.Message || mongoose.model<IMessage>("Message", MessageSchema);
