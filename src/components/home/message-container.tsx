@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import useChatStore from "@/store/chat-store";
 import { socket } from "@/lib/socket/socketClient";
-//import { IMessagePopulated } from "@/models/Message";
 import ChatBubble from "./chat-bubble";
 import ChatDaySeparator from "./ChatDaySeparator";
 import { useUser } from "@/context/UserContext";
@@ -13,6 +12,7 @@ import useSocketStore from "@/store/useSocketStore";
 import { MessageEditPayload, MessageNewPayload } from "@/server/socket/types/SocketEvents";
 import { markDelivered } from "@/lib/services/delivery.service";
 import { ClientMessage } from "@/types/client-message";
+import { UIMessage } from "@/types/ui-message";
 
 
 interface MessageContainerProps {
@@ -91,7 +91,7 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
 
             addMessage(
                 String(sel),
-                data
+                data as unknown as UIMessage
             );
             // Only receivers mark delivered
             if (data.sender !== currentUserId) {
@@ -100,9 +100,6 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
         };
         const handleEditMessage = (data: MessageEditPayload) => {
             updateEditedMessage(data.conversationId, data.messageId, data.text);
-            useChatStore
-                .getState()
-                .updateEditedMessage(conversationId, data.messageId, data.text);
         }
 
         const handleTyping = ({ userId }: { userId: string }) => {

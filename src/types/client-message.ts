@@ -1,4 +1,3 @@
-import { IMessagePopulated } from "@/models/Message";
 import { IUser } from "@/models/User";
 import { ClientUser } from "./user";
 

@@ -1,9 +1,21 @@
 import { IMessagePopulated } from "@/models/Message";
+import { ITempMessage } from "@/models/TempMessage";
 import { ClientMessage } from "@/types/client-message";
+import { UIMessage } from "@/types/ui-message";
+
+interface RawReply {
+    _id?: { toString(): string } | string;
+    text?: string;
+    content?: string;
+    senderId?: { toString(): string } | string;
+    sender?: { _id?: { toString(): string } | string };
+    toString?(): string;
+}
 
 export function toClientMessage(msg: IMessagePopulated): ClientMessage {
     return {
         _id: msg._id.toString(),
+        conversationId: msg.conversationId.toString(),
         content: msg.content,
         messageType: msg.messageType,
         sender:
@@ -23,10 +35,10 @@ export function toClientMessage(msg: IMessagePopulated): ClientMessage {
 }
 export function fromTempMessage(msg: ITempMessage): UIMessage {
     return {
-        _id: msg.tempId,
+        _id: msg._id.toString(),
         conversationId: msg.conversationId,
 
-        senderId: idToString(msg.senderId),
+        senderId: String(msg.senderId),
         sender: {
             _id: msg.sender._id,
             username: msg.sender.username,
@@ -44,7 +56,7 @@ export function fromTempMessage(msg: ITempMessage): UIMessage {
         repliedTo: normalizeReply(msg.repliedTo),
     };
 }
-function normalizeReply(repliedTo: any) {
+function normalizeReply(repliedTo: RawReply | string | null | undefined) {
     if (!repliedTo) return null;
 
     // Case 1: already normalized
@@ -62,7 +74,7 @@ function normalizeReply(repliedTo: any) {
     // Case 2: raw ObjectId → drop content (feature mode)
     if (typeof repliedTo === "string" || repliedTo?.toString) {
         return {
-            _id: repliedTo.toString(),
+            _id: repliedTo,
             text: "",
             senderId: "",
         };

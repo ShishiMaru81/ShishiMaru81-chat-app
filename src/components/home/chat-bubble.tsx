@@ -1,8 +1,7 @@
-import { IMessage, IMessagePopulated } from "@/models/Message";
+import { IMessagePopulated } from "@/models/Message";
 import ChatBubbleAvatar from "./chat-bubble-avatar";
 import useChatStore from "@/store/chat-store";
 import { Image } from "@imagekit/next";
-import { ITempMessage } from "@/models/TempMessage";
 import {
     DropdownMenu,
     DropdownMenuContent,

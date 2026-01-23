@@ -36,11 +36,9 @@ export interface IMessagePopulated extends Omit<IMessage, "sender" | "repliedTo"
 }
 
 // For optimistic UI / temp messages
-export interface ITempMessage extends Omit<IMessage, "_id" | "timestamp" | "createdAt"> {
-    _id: string; // temp string id
-    createdAt: Date | string;
-    isTemp?: boolean;
-}
+export interface ITempMessage extends Omit<IMessage, "_id" | "timestamp" | "createdAt"> { }
+// Import from canonical location
+//export { ITempMessage } from "./TempMessage";
 export interface MessageInputProps {
     onSend: (content: string) => void;
     replyTo?: IMessage;
