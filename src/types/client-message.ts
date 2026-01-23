@@ -1,25 +1,30 @@
 import { IMessagePopulated } from "@/models/Message";
 import { IUser } from "@/models/User";
+import { ClientUser } from "./user";
 
 export interface ClientReaction {
     emoji: string;
-    userIds: string[];
+    users: string[];
 }
-
 export interface ClientMessage {
-    id: string
-    conversationId: string
-    senderId: string
-    content: string | null
-    type: "text" | "image" | "file" | "system"
+    _id: string;
+    conversationId: string;
 
-    createdAt: string        // ISO string (single source of truth)
-    editedAt?: string
-    deletedAt?: string
+    content: string;
+    messageType: "text" | "image" | "file" | "system" | "video" | "audio" | "voice";
 
-    reactions: ClientReaction[]
-    deliveredTo: string[]
-    seenBy: string[]
+    sender: Pick<ClientUser, "_id" | "username" | "profilePicture">;
 
-    status?: "sending" | "sent" | "failed" // client-only
+    createdAt: Date;
+    updatedAt?: Date;
+
+    isDeleted?: boolean;
+    isEdited?: boolean;
+    reactions?: ClientReaction[];
+
+    repliedTo?: {
+        _id: string;
+        content: string;
+        sender: Pick<IUser, "_id" | "username" | "profilePicture">;
+    } | null;
 }

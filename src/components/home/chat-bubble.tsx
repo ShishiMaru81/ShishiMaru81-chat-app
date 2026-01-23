@@ -22,13 +22,14 @@ import { IUser } from "@/models/User";
 //import { Check, CheckCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ClientMessage } from "@/types/client-message";
+import { UIMessage } from "@/types/ui-message";
 
 interface ChatBubbleProps {
-    message: ITempMessage | ClientMessage;
+    message: UIMessage;
     currentUserId: string;
     onDelete: (msgId: string) => void;
-    onReply: (msg: IMessagePopulated | IMessage | ITempMessage) => void;
-    onReact: (msg: IMessagePopulated | IMessage | ITempMessage, emoji: string) => void;
+    onReply: (msg: UIMessage) => void;
+    onReact: (msg: UIMessage, emoji: string) => void;
 }
 
 // --------- Small helpers ---------
@@ -75,9 +76,9 @@ const ChatBubble = ({
     // );
 
     const isMine =
-        typeof message.senderId === "string"
-            ? message.senderId === currentUserId
-            : isUser(message.senderId) && message.senderId === currentUserId;
+        typeof message.sender === "string"
+            ? message.sender === currentUserId
+            : isUser(message.sender) && String(message.sender._id) === currentUserId;
 
     // reactions: { emoji: string; users: (string | {_id:string})[] }[]
     const reactions =
@@ -249,15 +250,15 @@ const ChatBubble = ({
 
                 <div
                     className={`w-full rounded-xl transition duration-300 ease-in-out relative
-                        ${isMine
+                            ${isMine
                             ? "bg-gradient-to-br from-indigo-500 to-purple-600 text-white"
                             : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100"
                         }
-                        ${(message).messageType !== "text"
+                            ${(message).messageType !== "text"
                             ? "p-0 bg-transparent shadow-none"
                             : "p-3 shadow-md"
                         }
-                    `}
+                        `}
                 >
                     {/* Reply preview (full: name + snippet) */}
                     {(message).repliedTo && getRepliedPreview()}
@@ -285,6 +286,7 @@ const ChatBubble = ({
                                         {message.messageType === "text" && (<DropdownMenuItem
                                             onClick={() =>
                                                 setEditingMessage(message)
+
                                             }
                                         >
                                             <Edit className="w-4 h-4 mr-2" /> Edit

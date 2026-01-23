@@ -1,4 +1,4 @@
-import { IConversation } from "@/models/Conversation";
+import { ClientConversation } from "./client-conversation";
 
 export interface ClientUser {
     _id: string;
@@ -10,7 +10,7 @@ export interface ClientUser {
     status: 'active' | 'banned';
     lastSeen: Date;
     isVerified: Date;
-    conversations: IConversation;
+    conversations: ClientConversation[];
     createdAt: Date;
     updatedAt: Date;
 }

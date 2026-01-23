@@ -1,6 +1,4 @@
-
-
-import { MessageType } from "./message.types";
+import { UIMessage } from "./ui-message";
 import { ClientUser } from "./user";
 
 export interface ClientConversation {
@@ -12,7 +10,7 @@ export interface ClientConversation {
     isGroup: boolean;
     groupName?: string;
 
-    lastMessage?: MessageType; // ✅ client-safe
+    lastMessage?: UIMessage; // ✅ client-safe
     unreadCount?: number;
 
     createdAt?: string;
