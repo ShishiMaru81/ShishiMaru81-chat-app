@@ -1,21 +1,21 @@
-import { ClientMessage } from "@/types/client-message";
+import { ClientMessage } from "../../types/client-message.js";
 
 // src/server/normalizers/message.normalizer.ts
 export function normalizeMessage(doc: any): ClientMessage {
     return {
-        id: doc._id.toString(),
+        _id: doc._id.toString(),
         conversationId: doc.conversationId.toString(),
-        senderId: doc.sender.toString(),
+        sender: doc.sender.toString(),
 
         content: doc.isDeleted ? null : doc.content,
-        type: doc.messageType,
+        messageType: doc.messageType,
 
         createdAt: doc.createdAt.toISOString(),
-        editedAt: doc.updatedAt?.toISOString(),
-        deletedAt: doc.isDeleted ? doc.updatedAt?.toISOString() : undefined,
+        //editedAt: doc.updatedAt?.toISOString(),
+        //deletedAt: doc.isDeleted ? doc.updatedAt?.toISOString() : undefined,
 
         reactions: doc.reactions ?? [],
-        deliveredTo: doc.deliveredTo?.map(String) ?? [],
-        seenBy: doc.seenBy?.map(String) ?? [],
+        //deliveredTo: doc.deliveredTo?.map(String) ?? [],
+        // seenBy: doc.seenBy?.map(String) ?? [],
     };
 }

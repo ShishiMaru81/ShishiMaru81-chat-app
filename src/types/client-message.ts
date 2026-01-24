@@ -1,4 +1,3 @@
-import { IUser } from "@/models/User";
 import { ClientUser } from "./user";
 
 export interface ClientReaction {
@@ -24,6 +23,6 @@ export interface ClientMessage {
     repliedTo?: {
         _id: string;
         content: string;
-        sender: Pick<IUser, "_id" | "username" | "profilePicture">;
+        sender: Pick<ClientUser, "_id" | "username" | "profilePicture">;
     } | null;
 }
