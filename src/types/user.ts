@@ -9,7 +9,8 @@ export interface ClientUser {
     role: 'user' | 'moderator' | 'admin';
     status: 'active' | 'banned';
     lastSeen: Date;
-    isVerified: Date;
+    isVerified: boolean;
+    verifiedAt?: Date;
     conversations: ClientConversation[];
     createdAt: Date;
     updatedAt: Date;

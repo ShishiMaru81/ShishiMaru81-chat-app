@@ -15,7 +15,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useOfflineStore } from '@/store/offline-store';
 import { useNetworkStatus } from '@/lib/hooks/useNetworkStatus';
 import { useRateLimitHandler } from "@/lib/hooks/useRateLimitHandler";
-import { IMessagePopulated, MessageInputProps } from "@/models/Message";
+import { MessageInputProps } from "@/models/Message";
 import useSocketStore from "@/store/useSocketStore";
 
 // 🧠 Small debounce util
@@ -114,7 +114,7 @@ const MessageInput = ({ replyTo }: MessageInputProps) => {
             messageType: "text",
             status: isOnline ? "pending" : "queued",
             sender: me,
-            timestamp: new Date().toISOString(),
+            createdAt: new Date(),
         };
 
         addMessage(tempId, tempMessage);

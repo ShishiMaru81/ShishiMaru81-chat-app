@@ -6,7 +6,7 @@ export interface OfflineMessage {
     conversationId: string;
     content: string;
     messageType: string;
-    timestamp: string | Date;
+    createdAt: string | Date;
     senderId: string;
 }
 
