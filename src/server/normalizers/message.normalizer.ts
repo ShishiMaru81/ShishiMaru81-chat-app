@@ -1,4 +1,4 @@
-import { ClientMessage } from "../../types/client-message.js";
+import type { ClientMessage } from "../../types/client-message.js";
 
 // src/server/normalizers/message.normalizer.ts
 export function normalizeMessage(doc: any): ClientMessage {
@@ -11,11 +11,11 @@ export function normalizeMessage(doc: any): ClientMessage {
         messageType: doc.messageType,
 
         createdAt: doc.createdAt.toISOString(),
-        //editedAt: doc.updatedAt?.toISOString(),
-        //deletedAt: doc.isDeleted ? doc.updatedAt?.toISOString() : undefined,
+        isEdited: doc.isEdited,
+        isDeleted: doc.isDeleted,
 
         reactions: doc.reactions ?? [],
-        //deliveredTo: doc.deliveredTo?.map(String) ?? [],
-        // seenBy: doc.seenBy?.map(String) ?? [],
+        deliveredTo: doc.deliveredTo?.map(String) ?? [],
+        seenBy: doc.seenBy?.map(String) ?? [],
     };
 }
