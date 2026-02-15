@@ -1,5 +1,5 @@
-import { UIMessage } from "./ui-message";
-import { ClientUser } from "./user";
+import { UIMessage } from "./ui-message.js";
+import { ClientUser } from "./user.js";
 
 export interface ClientConversation {
     _id: string;

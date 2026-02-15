@@ -1,4 +1,4 @@
-import { ClientUser } from "./user.js";
+import type { ClientUser } from "./user.js";
 
 export interface ClientReaction {
     emoji: string;
@@ -19,6 +19,8 @@ export interface ClientMessage {
     isDeleted?: boolean;
     isEdited?: boolean;
     reactions?: ClientReaction[];
+    seenBy?: string[];
+    deliveredTo?: string[];
 
     repliedTo?: {
         _id: string;

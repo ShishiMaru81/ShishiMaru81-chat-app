@@ -12,7 +12,7 @@ import useSocketStore from "@/store/useSocketStore";
 import { MessageEditPayload, MessageNewPayload } from "@/server/socket/types/SocketEvents";
 import { markDelivered } from "@/lib/services/delivery.service";
 import { ClientMessage } from "@/types/client-message";
-import { UIMessage } from "@/types/ui-message";
+import { UIMessage } from "@/shared/types/ui-message";
 
 
 interface MessageContainerProps {

@@ -1,4 +1,4 @@
-import type { ClientMessage } from "../../types/client-message.js";
+import type { ClientMessage } from "../../shared/types/client-message.js";
 
 // src/server/normalizers/message.normalizer.ts
 export function normalizeMessage(doc: any): ClientMessage {

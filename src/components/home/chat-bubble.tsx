@@ -21,7 +21,7 @@ import { IUser } from "@/models/User";
 //import { Check, CheckCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ClientMessage } from "@/types/client-message";
-import { UIMessage } from "@/types/ui-message";
+import { UIMessage } from "@/shared/types/ui-message";
 
 interface ChatBubbleProps {
     message: UIMessage;

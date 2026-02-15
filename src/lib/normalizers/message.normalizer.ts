@@ -1,7 +1,7 @@
 import { IMessagePopulated } from "@/models/Message";
 import { ITempMessage } from "@/models/TempMessage";
 import { ClientMessage, ClientReaction } from "@/types/client-message";
-import { UIMessage } from "@/types/ui-message";
+import { UIMessage } from "@/shared/types/ui-message";
 
 interface RawReply {
     _id?: { toString(): string } | string;

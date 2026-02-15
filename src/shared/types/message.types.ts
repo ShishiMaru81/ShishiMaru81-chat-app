@@ -1,4 +1,4 @@
-import { IUser } from "@/models/User";
+import { ClientUser } from "./user.js";
 
 export type MessageType = "text" | "image" | "file" | "voice" | "video" | "audio";
 
@@ -6,7 +6,7 @@ export interface ClientMessage {
     _id: string;
     conversationId: string;
 
-    sender: IUser; // already populated
+    sender: ClientUser; // already populated
     content: string;
 
     messageType: MessageType;

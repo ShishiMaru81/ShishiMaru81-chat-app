@@ -2,7 +2,7 @@
 import { create } from "zustand";
 import { ITempMessage } from "@/models/TempMessage";
 import { ClientConversation } from "@/types/client-conversation";
-import { UIMessage } from "@/types/ui-message";
+import { UIMessage } from "@/shared/types/ui-message";
 interface ChatStore {
     selectedConversationId: string | null;
     currentUserId: string | null;
