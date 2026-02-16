@@ -1,8 +1,9 @@
+import { MessageDTO } from "@/shared/dto/message.dto.js";
 import { IMessagePopulated } from "../../models/Message.js";
 import type { ClientMessage, ClientReaction } from "../../shared/types/client-message.js";
 
 // src/server/normalizers/message.normalizer.ts
-export function normalizeMessage(doc: IMessagePopulated): ClientMessage {
+export function normalizeMessage(doc: IMessagePopulated): MessageDTO {
     return {
         _id: doc._id.toString(),
         conversationId: doc.conversationId.toString(),
@@ -16,19 +17,18 @@ export function normalizeMessage(doc: IMessagePopulated): ClientMessage {
             profilePicture: doc.sender.profilePicture,
         },
 
-        repliedTo: doc.repliedTo
-            ? {
-                _id: doc.repliedTo._id.toString(),
-                content: doc.repliedTo.content,
-                sender: {
-                    _id: doc.repliedTo.sender._id.toString(),
-                    username: doc.repliedTo.sender.username,
-                    profilePicture: doc.repliedTo.sender.profilePicture,
-                },
-            }
-            : null,
+        createdAt: new Date(doc.createdAt).toISOString(),
+        updatedAt: doc.updatedAt
+            ? new Date(doc.updatedAt).toISOString()
+            : undefined,
 
-        reactions: Array.isArray(doc.reactions)
+        isDeleted: doc.isDeleted,
+        isEdited: doc.isEdited,
+        editedAt: doc.isEdited && doc.updatedAt
+            ? new Date(doc.updatedAt).toISOString()
+            : undefined,
+
+        reactions: doc.reactions
             ? doc.reactions.map((reaction) => ({
                 emoji: reaction.emoji,
                 users: (reaction.users ?? []).map((user: any) =>
@@ -39,14 +39,32 @@ export function normalizeMessage(doc: IMessagePopulated): ClientMessage {
                             : user.toString()
                 ),
             }))
-            : undefined,
+            : [],
 
-        createdAt: doc.createdAt,
-        editedAt: doc.isEdited ? doc.updatedAt?.toISOString() : undefined,
-        // deletedAt: doc.isDeleted ? doc.updatedAt?.toISOString() : undefined,
+        seenBy: doc.seenBy
+            ? doc.seenBy.map((entry: any) =>
+                entry.user
+                    ? entry.user.toString()
+                    : entry.toString()
+            )
+            : [],
 
-        isEdited: doc.isEdited,
-        isDeleted: doc.isDeleted,
+        deliveredTo: doc.deliveredTo
+            ? doc.deliveredTo.map((entry: any) =>
+                entry.user
+                    ? entry.user.toString()
+                    : entry.toString()
+            )
+            : [],
+        repliedTo: doc.repliedTo ? {
+            _id: doc.repliedTo._id.toString(),
+            content: doc.repliedTo.content,
+            sender: {
+                _id: doc.repliedTo.sender._id.toString(),
+                username: doc.repliedTo.sender.username,
+                profilePicture: doc.repliedTo.sender.profilePicture,
+            }
+        } : null,
     };
 }
 export function normalizeReactions(
