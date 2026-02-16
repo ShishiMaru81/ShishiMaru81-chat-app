@@ -3,7 +3,7 @@ import { Server as IOServer, Socket as IOSocket } from "socket.io";
 import {
     ServerToClientEvents,
     ClientToServerEvents,
-} from "../server/socket/types/SocketEvents";
+} from "../shared/types/SocketEvents";
 
 declare global {
     // ============================
