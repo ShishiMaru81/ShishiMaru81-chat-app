@@ -1,41 +1,40 @@
 import { create } from "zustand";
-import { IConversation, IConversationPopulated } from "@/models/Conversation";
-import { IMessagePopulated } from "@/models/Message";
-import { ITempMessage } from "@/models/TempMessage";  // or wherever you define it
+import { ClientConversation } from "@/shared/types/client-conversation";
+import { ClientMessage } from "@/shared/types/client-message";
 import { socket } from "@/lib/socket/socketClient";
 
-type MessageType = IMessagePopulated | ITempMessage;
 interface ChatStore {
-    selectedConversation: IConversationPopulated | null;
-    conversations: (IConversation & { unreadCount?: number })[]; // added unreadCount
-    messages: MessageType[];
+    selectedConversation: ClientConversation | null;
+    conversations: (ClientConversation & { unreadCount?: number })[]; // added unreadCount
+    messages: ClientMessage[];
     hasMore: boolean;
     onlineUsers: string[];
 
 
     // setters
-    setSelectedConversation: (conversation: IConversation | null) => void;
-    setConversations: (convs: IConversation[]) => void;
+    setSelectedConversation: (conversation: ClientConversation | null) => void;
+    setConversations: (convs: ClientConversation[]) => void;
     setHasMore: (val: boolean) => void;
     setOnlineUsers: (users: string[]) => void;
 
     // messages
-    setMessages: (msgs: IMessagePopulated[], appendToTop?: boolean) => void;
-    addMessage: (msg: MessageType) => void;
-    replaceTempMessage: (tempId: string, newMsg: IMessagePopulated) => void;
+    setMessages: (msgs: ClientMessage[], appendToTop?: boolean) => void;
+    addMessage: (msg: ClientMessage) => void;
+    replaceTempMessage: (tempId: string, newMsg: ClientMessage) => void;
     clearTempMessages: () => void;
     //updateMessageReactions: (id: string, reactions: string[]) => void;
-    updateEditedMessage: (updatedMessage: IMessagePopulated) => void;
+    updateEditedMessage: (updatedMessage: ClientMessage) => void;
 
 
     // conversation helpers
-    updateLastMessage: (conversationId: string, msg: MessageType) => void;
+    updateLastMessage: (conversationId: string, msg: ClientMessage) => void;
     incrementUnread: (conversationId: string) => void;
     clearUnread: (conversationId: string) => void;
 }
-export const reactToMessage = (msg: IMessagePopulated, emoji: string) => {
+export const reactToMessage = (msg: ClientMessage, emoji: string) => {
     socket.emit("message:reaction", {
-        messageId: String(msg._id),
+        userId: msg.sender._id,
+        messageId: msg._id,
         emoji,
     });
 };
@@ -49,12 +48,12 @@ export const useConversationStore = create<ChatStore>((set, get) => ({
 
     setSelectedConversation: (conversation) =>
         set({
-            selectedConversation: conversation as IConversationPopulated,
+            selectedConversation: conversation,
             messages: [],
             hasMore: true,
             conversations: get().conversations.map((c) =>
                 c._id === conversation?._id ? { ...c, unreadCount: 0 } : c
-            ) as (IConversation & { unreadCount?: number })[],
+            ) as (ClientConversation & { unreadCount?: number })[],
         }),
 
     setConversations: (convs) => set({ conversations: convs }),
@@ -91,7 +90,7 @@ export const useConversationStore = create<ChatStore>((set, get) => ({
                 get().incrementUnread(msg.conversationId.toString());
             }
 
-            return { messages: [...state.messages, msg as IMessagePopulated] };
+            return { messages: [...state.messages, msg] };
         }),
 
     replaceTempMessage: (tempId, realMessage) =>
@@ -114,7 +113,7 @@ export const useConversationStore = create<ChatStore>((set, get) => ({
         set((state) => ({
             conversations: state.conversations.map((conv) =>
                 conv._id.toString() === conversationId ? { ...conv, lastMessage: message } : conv
-            ) as (IConversation & { unreadCount?: number })[],
+            ) as (ClientConversation & { unreadCount?: number })[],
         })),
 
     incrementUnread: (conversationId) =>
@@ -123,7 +122,7 @@ export const useConversationStore = create<ChatStore>((set, get) => ({
                 conv._id.toString() === conversationId
                     ? { ...conv, unreadCount: (conv.unreadCount || 0) + 1 }
                     : conv
-            ) as (IConversation & { unreadCount?: number })[],
+            ) as (ClientConversation & { unreadCount?: number })[],
         })),
     //     updateMessageReactions: (id, reactions) =>
     //   set((state) => ({
@@ -143,6 +142,6 @@ export const useConversationStore = create<ChatStore>((set, get) => ({
         set((state) => ({
             conversations: state.conversations.map((conv) =>
                 conv._id.toString() === conversationId ? { ...conv, unreadCount: 0 } : conv
-            ) as (IConversation & { unreadCount?: number })[],
+            ) as (ClientConversation & { unreadCount?: number })[],
         })),
 }));
