@@ -6,17 +6,12 @@ import {
 } from "../shared/types/SocketEvents";
 
 declare global {
-    // ============================
-    // Typed Socket.IO Server
-    // ============================
+
     var io: SocketIOServer | undefined;
 
     interface SocketIOServer
         extends IOServer<ClientToServerEvents, ServerToClientEvents> { }
 
-    // ============================
-    // Typed Socket.IO Socket
-    // ============================
     interface TypedSocket
         extends IOSocket<ClientToServerEvents, ServerToClientEvents> {
         data: {
