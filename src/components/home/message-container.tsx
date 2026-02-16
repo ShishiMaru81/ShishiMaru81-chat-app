@@ -6,7 +6,6 @@ import { socket } from "@/lib/socket/socketClient";
 import ChatBubble from "./chat-bubble";
 import ChatDaySeparator from "./ChatDaySeparator";
 import { useUser } from "@/context/UserContext";
-import { ITempMessage } from "@/models/TempMessage";
 import { deleteMessage } from "@/lib/utils/api";
 import useSocketStore from "@/store/useSocketStore";
 import { MessageEditPayload, MessageNewPayload } from "@/shared/types/SocketEvents";
@@ -14,6 +13,7 @@ import { markDelivered } from "@/lib/services/delivery.service";
 import { ClientMessage } from "@/shared/types/client-message";
 import { UIMessage } from "@/shared/types/ui-message";
 import { isClientMessage } from "@/shared/utils/message.guard";
+import { normalizeReactions } from "@/server/normalizers/message.normalizer";
 
 
 interface MessageContainerProps {
@@ -87,15 +87,25 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
             const currentUserId = user?._id?.toString();
 
             if (!currentUserId) return;
-
+            const normalized: UIMessage = {
+                _id: data._id,
+                conversationId: data.conversationId,
+                content: data.content,
+                messageType: data.messageType,
+                sender: data.sender,
+                reactions: normalizeReactions(data.reactions),
+                createdAt: new Date(data.createdAt),
+                isDeleted: data.isDeleted,
+                isEdited: data.isEdited,
+            };
             updateLastMessage(
                 String(sel),
-                data
+                normalized
             );
 
             addMessage(
                 String(sel),
-                data
+                normalized
             );
             // Only receivers mark delivered
             if (data.sender !== currentUserId) {
@@ -169,7 +179,7 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
                         <div key={String(msg._id)}>
                             {showSeparator && <ChatDaySeparator date={msgDate} />}
                             <ChatBubble
-                                message={msg as ITempMessage | ClientMessage}
+                                message={msg as UIMessage}
                                 currentUserId={user?._id?.toString()}
                                 onDelete={deleteMessage}
                                 onReply={() => { }}
