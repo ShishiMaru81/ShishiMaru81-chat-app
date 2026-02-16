@@ -13,8 +13,8 @@ export interface ClientMessage {
     status: "pending" | "failed" | "sent" | "delivered" | "queued";
     sender: Pick<ClientUser, "_id" | "username" | "profilePicture">;
 
-    createdAt: Date;
-    updatedAt?: Date;
+    createdAt: string;
+    updatedAt?: string;
 
     isDeleted?: boolean;
     isEdited?: boolean;
