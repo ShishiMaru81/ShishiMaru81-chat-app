@@ -42,10 +42,9 @@ interface ChatStore {
     updateLastMessage: (conversationId: string, msg: UIMessage) => void;
     incrementUnread: (conversationId: string) => void;
     clearUnread: (conversationId: string) => void;
-    receiveMessage: (payload: {
-        conversationId: string;
-        message: UIMessage;
-    }) => void;
+    receiveMessage: (
+        message: UIMessage
+    ) => void;
 
     // typing
     setTyping: (conversationId: string, userId: string, isTyping: boolean) => void;
@@ -300,8 +299,9 @@ const useChatStore = create<ChatStore>((set) => ({
 
     setEditingMessage: (msg) => set({ editingMessage: msg }),
     clearEditingMessage: () => set({ editingMessage: null }),
-    receiveMessage: ({ conversationId, message }) =>
+    receiveMessage: (message: UIMessage) =>
         set((state) => {
+            const conversationId = message.conversationId;
             const existing = state.messagesByConversation[conversationId] || [];
 
             if (existing.some((m) => idOf(m) === idOf(message))) {
@@ -311,12 +311,12 @@ const useChatStore = create<ChatStore>((set) => ({
             const updatedMessages = [...existing, message];
 
             const isOpen = state.selectedConversationId === conversationId;
-
-            const senderId =
-                typeof message.sender === "string"
-                    ? message.sender
-                    : message.sender._id;
-
+            console.log("message", message);
+            if (!message.sender || !message.sender._id) {
+                console.error("Invalid message shape in store:", message);
+                return {};
+            }
+            const senderId = message.sender._id;
             const isOwn = senderId === state.currentUserId;
 
             const conversations = state.conversations.map((conv) =>
