@@ -4,9 +4,14 @@ import { io, Socket } from "socket.io-client";
 import {
     type ServerToClientEvents,
     type ClientToServerEvents,
+    SocketEvents,
     // SocketEvents,
 } from "@/shared/types/SocketEvents";
 import useChatStore from "@/store/chat-store";
+import { MessageDTO } from "@/shared/dto/message.dto.js";
+import { isMessageDTO } from "@/shared/utils/message.guard";
+import { UIMessage } from "@/shared/types/ui-message";
+
 
 // You can configure this in .env.local
 const SOCKET_URL =
@@ -74,12 +79,28 @@ export function registerGlobalSocketListeners() {
     if (listenersRegistered) return;
     listenersRegistered = true;
 
-    socket.on("message:new", (payload) => {
-        useChatStore.getState().receiveMessage({
-            conversationId: String(payload.conversationId),
-            message: payload.message,
-        });
-    });
+    socket.on(SocketEvents.MESSAGE_NEW, (dto: unknown) => {
+        if (!isMessageDTO(dto)) {
+            console.error("Invalid MESSAGE_NEW payload:", dto);
+            return;
+        }
 
-    // (future) typing, presence, edits, deletes
+        const uiMessage = convertDTOToUI(dto);
+
+        useChatStore.getState().receiveMessage(uiMessage);
+    });
+}
+
+function convertDTOToUI(dto: MessageDTO): UIMessage {
+    if (!dto.sender || !dto.sender._id) {
+        throw new Error("Invalid DTO: missing sender");
+    }
+
+    return {
+        ...dto,
+        createdAt: new Date(dto.createdAt),
+        updatedAt: dto.updatedAt ? new Date(dto.updatedAt) : undefined,
+        status: "sent",
+        isTemp: false,
+    };
 }
