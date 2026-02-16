@@ -7,11 +7,9 @@ import { Button } from "../ui/button";
 import { getMe } from "@/lib/utils/api";
 import useChatStore from "@/store/chat-store";
 import { getSocket } from "@/lib/socket/socketClient";
-import { IUser } from "@/models/User";
 import { ClientUser } from "@/shared/types/user";
 import { ImageUpload } from "./ImageUpload";
 import { toast } from "sonner"
-import { ITempMessage } from "@/models/TempMessage";
 import { v4 as uuidv4 } from 'uuid';
 import { useOfflineStore } from '@/store/offline-store';
 import { useNetworkStatus } from '@/lib/hooks/useNetworkStatus';
