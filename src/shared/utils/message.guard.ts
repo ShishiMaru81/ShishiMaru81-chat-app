@@ -1,11 +1,16 @@
-import type { ClientMessage } from "../types/message.js";
+import { MessageDTO } from "../dto/message.dto";
 
-export function isClientMessage(obj: any): obj is ClientMessage {
+export function isMessageDTO(value: unknown): value is MessageDTO {
+    if (!value || typeof value !== "object") return false;
+
+    const v = value as any;
+
     return (
-        typeof obj === "object" &&
-        typeof obj._id === "string" &&
-        typeof obj.conversationId === "string" &&
-        typeof obj.content === "string" &&
-        typeof obj.createdAt === "string"
+        typeof v._id === "string" &&
+        typeof v.conversationId === "string" &&
+        typeof v.content === "string" &&
+        typeof v.createdAt === "string" &&
+        v.sender &&
+        typeof v.sender._id === "string"
     );
 }

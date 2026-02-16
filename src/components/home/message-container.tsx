@@ -8,12 +8,10 @@ import ChatDaySeparator from "./ChatDaySeparator";
 import { useUser } from "@/context/UserContext";
 import { deleteMessage } from "@/lib/utils/api";
 import useSocketStore from "@/store/useSocketStore";
-import { MessageEditPayload, MessageNewPayload } from "@/shared/types/SocketEvents";
+import { MessageEditPayload } from "@/shared/types/SocketEvents";
 import { markDelivered } from "@/lib/services/delivery.service";
-import { ClientMessage } from "@/shared/types/client-message";
 import { UIMessage } from "@/shared/types/ui-message";
-import { isClientMessage } from "@/shared/utils/message.guard";
-import { normalizeReactions } from "@/server/normalizers/message.normalizer";
+import { isMessageDTO } from "@/shared/utils/message.guard";
 
 
 interface MessageContainerProps {
@@ -36,7 +34,7 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
             const res = await fetch(
                 `/api/messages?conversationId=${sel}&cursor=${cursor || ""}`
             );
-            const data = await res.json() as ClientMessage[];
+            const data = await res.json() as UIMessage[];
             const redata = data.reverse();
             if (redata.length < 20) setHasMore(String(sel), false);
             setMessages(String(sel), redata, !!cursor);
@@ -79,36 +77,29 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
 
         // JOIN
 
-        const handleNewMessage = (data: MessageNewPayload) => {
-            if (!isClientMessage(data)) {
-                console.error("Invalid message payload");
+        const handleNewMessage = (data: unknown) => {
+            if (!isMessageDTO(data)) {
+                console.error("Invalid message payload", data);
                 return;
             }
+
             const currentUserId = user?._id?.toString();
-
             if (!currentUserId) return;
-            const normalized: UIMessage = {
-                _id: data._id,
-                conversationId: data.conversationId,
-                content: data.content,
-                messageType: data.messageType,
-                sender: data.sender,
-                reactions: normalizeReactions(data.reactions),
-                createdAt: new Date(data.createdAt),
-                isDeleted: data.isDeleted,
-                isEdited: data.isEdited,
-            };
-            updateLastMessage(
-                String(sel),
-                normalized
-            );
 
-            addMessage(
-                String(sel),
-                normalized
-            );
-            // Only receivers mark delivered
-            if (data.sender !== currentUserId) {
+            const isOwn = data.sender._id === currentUserId;
+
+            const normalized: UIMessage = {
+                ...data,
+                createdAt: new Date(data.createdAt),
+                updatedAt: data.updatedAt ? new Date(data.updatedAt) : undefined,
+                status: isOwn ? "sent" : "delivered",
+                isTemp: false,
+            };
+
+            updateLastMessage(String(sel), normalized);
+            addMessage(String(sel), normalized);
+
+            if (!isOwn) {
                 markDelivered(data._id, Date.now());
             }
         };
@@ -151,7 +142,7 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
         return () => {
             socket.emit("conversation:leave", { conversationId: String(sel) });
             socket.off("message:new", handleNewMessage);
-            socket.off("message:edit", handleEditMessage);
+            socket.off("message:edited", handleEditMessage);
             socket.off("typing:start", handleTyping);
             socket.off("typing:stop", handleStopTyping);
         };
@@ -174,7 +165,6 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
                     const dayKey = msgDate.toDateString();
                     const showSeparator = lastDate !== dayKey;
                     lastDate = dayKey;
-                    console.log(msg)
                     return (
                         <div key={String(msg._id)}>
                             {showSeparator && <ChatDaySeparator date={msgDate} />}
