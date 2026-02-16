@@ -1,7 +1,7 @@
 // src/store/chat-store.ts
 import { create } from "zustand";
 import { ITempMessage } from "@/models/TempMessage";
-import { ClientConversation } from "@/types/client-conversation";
+import { ClientConversation } from "@/shared/types/client-conversation";
 import { UIMessage } from "@/shared/types/ui-message";
 interface ChatStore {
     selectedConversationId: string | null;
@@ -26,7 +26,7 @@ interface ChatStore {
         appendToTop?: boolean
     ) => void;
 
-    addOptimisticMessage: (conversationId: string, msg: ITempMessage) => void;
+    addOptimisticMessage: (conversationId: string, msg: UIMessage) => void;
     addMessage: (conversationId: string, msg: UIMessage) => void;
     replaceTempMessage: (
         conversationId: string,
