@@ -10,7 +10,7 @@ export interface ClientMessage {
 
     content: string;
     messageType: "text" | "image" | "file" | "system" | "video" | "audio" | "voice";
-
+    status: "pending" | "failed" | "sent" | "delivered" | "queued";
     sender: Pick<ClientUser, "_id" | "username" | "profilePicture">;
 
     createdAt: Date;
@@ -18,6 +18,7 @@ export interface ClientMessage {
 
     isDeleted?: boolean;
     isEdited?: boolean;
+    editedAt?: string;
     reactions?: ClientReaction[];
     seenBy?: string[];
     deliveredTo?: string[];
