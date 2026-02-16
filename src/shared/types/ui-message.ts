@@ -1,4 +1,9 @@
-import { ClientMessage } from "./client-message.js";
-import { TempMessage } from "./temp-message.js";
+import { MessageDTO } from "../dto/message.dto.js";
 
-export type UIMessage = ClientMessage | TempMessage;
+export interface UIMessage extends Omit<MessageDTO, "createdAt" | "updatedAt"> {
+    createdAt: Date;
+    updatedAt?: Date;
+
+    status: "pending" | "failed" | "sent" | "delivered" | "queued";
+    isTemp?: boolean;
+}
