@@ -26,6 +26,7 @@ export interface IMessage {
     seenBy?: IDeliveredTo[];
     deliveredTo?: IDeliveredTo[];
     createdAt: Date;
+    status: "pending" | "failed" | "sent" | "delivered" | "queued";
     updatedAt?: Date;
 }
 
@@ -72,6 +73,11 @@ const MessageSchema = new Schema<IMessage>({
         type: String,
         enum: ["text", "image", "video", "audio", "voice", "file"],
         default: "text",
+    },
+    status: {
+        type: String,
+        enum: ["pending", "failed", "sent", "delivered", "queued"],
+        default: "pending",
     },
     seenBy: {
         type: [DeliveredSchema],
