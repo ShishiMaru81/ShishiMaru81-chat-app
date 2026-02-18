@@ -1,6 +1,15 @@
-// your actual socket instance
+import type { Server as IOServer } from "socket.io";
+
+let io: IOServer | null = null;
+
+export function registerIO(server: IOServer) {
+    io = server;
+}
 
 export function emitToSocketServer(event: string, payload: unknown) {
-    //const io = initIO(server, redis);
-    //io.emit(event, payload);
+    if (!io) {
+        throw new Error("Socket.IO server not initialized");
+    }
+
+    io.emit(event, payload);
 }
