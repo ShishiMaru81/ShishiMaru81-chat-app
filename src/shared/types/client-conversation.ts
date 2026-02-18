@@ -9,7 +9,7 @@ export interface ClientConversation {
     image?: string;
     isGroup: boolean;
     groupName?: string;
-
+    admin?: string;
     lastMessage?: UIMessage; // ✅ client-safe
     unreadCount?: number;
 
