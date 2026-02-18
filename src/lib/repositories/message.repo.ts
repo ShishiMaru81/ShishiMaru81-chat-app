@@ -1,4 +1,4 @@
-import Message from "@/models/Message";
+import Message, { IMessagePopulated } from "@/models/Message";
 import { Types } from "mongoose";
 import { IMessage } from "@/models/Message";
 import { connectToDatabase } from "../Db/db";
@@ -14,7 +14,7 @@ export async function getPaginatedMessages(conversationId: string, cursor?: stri
         .sort({ _id: -1 })
         .limit(limit)
         .populate("sender", "username email profilePicture status _id")
-        .lean();
+        .lean<IMessagePopulated[]>();
 
     return messages;
 }
