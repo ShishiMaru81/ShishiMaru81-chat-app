@@ -24,12 +24,12 @@ export const authOptions: NextAuthOptions = {
                 const ip = (await headers()).get("x-forwarded-for") || "unknown";
 
                 // Apply rate limit
-                // const { success, } = await loginRateLimiter.limit(ip);
+                const { success, } = await loginRateLimiter.limit(ip);
                 console.log(`Login attempt from IP ${ip}`);
-                // if (!success) {
-                //     console.warn(`Too many login attempts from IP ${ip}`);
-                //     throw new Error("Too many login attempts. Please try again later.");
-                // }
+                if (!success) {
+                    console.warn(`Too many login attempts from IP ${ip}`);
+                    throw new Error("Too many login attempts. Please try again later.");
+                }
                 if (!credentials?.email || !credentials?.password) {
                     throw new Error("Missing email or password");
                 }
