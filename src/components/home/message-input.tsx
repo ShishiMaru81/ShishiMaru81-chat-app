@@ -83,23 +83,31 @@ const MessageInput = ({ replyTo }: MessageInputProps) => {
         if (!msgText.trim() || !me || !sel || isRateLimited) return;
 
         if (editingMessage) {
-            const res = await fetch(`/api/messages/${editingMessage._id}/edit`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    newText: msgText.trim(),
-                    messageId: editingMessage._id,
-                }),
-            });
-            if (!res.ok) throw new Error("Failed to edit message");
-            socket.emit("message:edit", {
-                conversationId: String(sel),
-                messageId: String(editingMessage._id),
-                text: msgText.trim(),
-            });
-            updateEditedMessage(String(sel), String(editingMessage._id), msgText.trim());
-            clearEditingMessage();
-            setMsgText("");
+            try {
+                const res = await fetch(`/api/messages/${editingMessage._id}/edit`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        newText: msgText.trim(),
+                        messageId: editingMessage._id,
+                    }),
+                });
+                if (!res.ok) {
+                    toast.error("failed to edit message")
+                    return;
+                }
+                socket.emit("message:edit", {
+                    conversationId: String(sel),
+                    messageId: String(editingMessage._id),
+                    text: msgText.trim(),
+                });
+                updateEditedMessage(String(sel), String(editingMessage._id), msgText.trim());
+                clearEditingMessage();
+                setMsgText("");
+            } catch (error) {
+                console.error("Failed to edit message", error);
+                toast.error("Failed to edit message");
+            }
             return;
         }
 
@@ -118,13 +126,23 @@ const MessageInput = ({ replyTo }: MessageInputProps) => {
             status: isOnline ? "pending" : "queued",
             isDeleted: false,
             createdAt: new Date(),
+            isTemp: true,
         };
 
         addMessage(tempId, tempMessage);
         setMsgText("");
 
         if (!isOnline || socket.disconnected) {
-            await addToQueue({ ...tempMessage, tempId: tempId });
+            await addToQueue({
+                tempId,
+                id: Number(tempId),
+                conversationId: String(sel),
+                senderId: String(me._id), // ✅ required
+                content: tempMessage.content,
+                messageType: tempMessage.messageType,
+                createdAt: tempMessage.createdAt,
+                status: "queued",
+            });
             toast("Message queued. Will send when online.");
             return;
         }

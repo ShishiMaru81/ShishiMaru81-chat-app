@@ -8,6 +8,7 @@ export interface OfflineMessage {
     messageType: string;
     createdAt: string | Date;
     senderId: string;
+    status: string;
 }
 
 class OfflineMessageDB extends Dexie {
