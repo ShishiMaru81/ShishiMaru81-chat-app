@@ -5,6 +5,7 @@ import { create } from "zustand";
 import { getSocket } from "@/lib/socket/socketClient";
 import { MessageEditPayload, SocketEvents } from "@/shared/types/SocketEvents";
 import useChatStore from "./chat-store";
+import { MessageDTO } from "@/shared/dto/message.dto";
 interface SocketState {
     connected: boolean;
     currentConversationId: string | null;
@@ -18,7 +19,7 @@ interface SocketState {
 
     startTyping: (conversationId: string, userId: string) => void;
     stopTyping: (conversationId: string, userId: string) => void;
-    sendMessage: (payload: any, conversationmembers: any) => void;
+    sendMessage: (payload: MessageDTO & { tempId?: string }, conversationMembers: string[]) => void;
     editMessageUpdate: (msg: MessageEditPayload) => void;
 }
 
@@ -65,20 +66,20 @@ const useSocketStore = create<SocketState>((set, get) => ({
         socket.emit(SocketEvents.TYPING_STOP, { conversationId, userId });
     },
 
-    sendMessage: (payload, conversationmembers) => {
+    sendMessage: (payload, conversationMembers) => {
         const socket = getSocket();
-        socket.emit(SocketEvents.MESSAGE_SEND, { data: payload, conversationMembers: conversationmembers });
+        socket.emit(SocketEvents.MESSAGE_SEND, { data: payload, conversationMembers: conversationMembers });
 
 
         // Optimistic UI insert
         if (payload.tempId) {
             useChatStore.getState().addOptimisticMessage(payload.conversationId, {
                 _id: payload.tempId,
-                sender: payload,
+                sender: payload.sender,
                 conversationId: payload.conversationId,
                 isDeleted: false,
                 content: payload.content,
-                messageType: payload.type,
+                messageType: payload.messageType,
                 status: "pending",
                 createdAt: new Date(),
             });
@@ -86,7 +87,7 @@ const useSocketStore = create<SocketState>((set, get) => ({
     },
     editMessageUpdate: (msg) => {
         const socket = getSocket();
-        socket.emit("message:edit", msg);
+        socket.emit(SocketEvents.MESSAGE_EDIT, msg);
     },
 }));
 

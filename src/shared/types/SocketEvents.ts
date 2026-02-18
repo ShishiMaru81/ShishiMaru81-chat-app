@@ -1,16 +1,10 @@
-// ============================================================================
 // SOCKET EVENT CONSTANTS
 
 import { MessageDTO } from "../dto/message.dto.js";
-import type { ClientMessage } from "./client-message.js";
-// ============================================================================
-//  interface IReaction {
-//     emoji: string;
-//     users: mongoose.Types.ObjectId[] | (mongoose.Types.ObjectId | IUser)[];
-// }
+
 
 export const SocketEvents = {
-    // ---------- MESSAGE ----------
+    //  MESSAGE 
     MESSAGE_NEW: "message:new",
     MESSAGE_SEND: "message:send",
     MESSAGE_SEND_ACK: "message:send:ack",
@@ -29,17 +23,17 @@ export const SocketEvents = {
     MESSAGE_UNSEND: "message:unsend",                // delete for everyone
     MESSAGE_REACTION: "message:reaction",
 
-    // ---------- TYPING ----------
+    // TYPING 
     TYPING_START: "typing:start",
     TYPING_STOP: "typing:stop",
 
-    // ---------- PRESENCE ----------
+    //  PRESENCE 
     USER_ONLINE: "user:online",
     USER_OFFLINE: "user:offline",
     USER_IDLE: "user:idle",
     USER_ACTIVE: "user:active",
 
-    // ---------- CALL ----------
+    //  CALL 
     CALL_OFFER: "call:offer",
     CALL_ANSWER: "call:answer",
     CALL_ICE_CANDIDATE: "call:ice-candidate",
@@ -48,19 +42,19 @@ export const SocketEvents = {
     CALL_END: "call:end",
     CALL_RECONNECT: "call:reconnect",
 
-    // ---------- CONVERSATION ----------
+    //  CONVERSATION 
     CONVERSATION_JOIN: "conversation:join",
     CONVERSATION_LEAVE: "conversation:leave",
     CONVERSATION_JOINED: "conversation:joined",  // server → others
     CONVERSATION_LEFT: "conversation:left",
     CONVERSATION_UPDATED: "conversation:updated",
 
-    // ---------- SYNC ----------
+    //  SYNC 
     SYNC_MESSAGES: "sync:messages",
     SYNC_CONVERSATIONS: "sync:conversations",
     SYNC_STATUS: "sync:status",
 
-    // ---------- ERRORS ----------
+    //  ERRORS 
     ERROR_GENERIC: "error:generic",
     ERROR_MESSAGE: "error:message",
     ERROR_CALL: "error:call",
@@ -72,13 +66,7 @@ export const SocketEvents = {
 export type SocketEventName = (typeof SocketEvents)[keyof typeof SocketEvents];
 export type ValueOf<T> = T[keyof T];
 
-
-// ============================================================================
 // PAYLOAD TYPES
-// ============================================================================
-
-// ---------- MESSAGE ----------
-
 
 export interface MessageSendAckPayload {
     tempId: string;
@@ -173,7 +161,7 @@ export interface UserActivePayload {
 }
 
 
-// ---------- CALL (WebRTC) ----------
+//  CALL (WebRTC) 
 
 export interface CallOfferPayload {
     from: string;
@@ -210,7 +198,7 @@ export interface CallReconnectPayload {
 }
 
 
-// ---------- CONVERSATION ----------
+//  CONVERSATION 
 
 export interface ConversationJoinPayload {
     conversationId: string;
@@ -242,7 +230,7 @@ export interface ConversationUpdatedPayload {
 }
 
 
-// ---------- SYNC ----------
+//  SYNC 
 
 export interface SyncMessagesPayload {
     conversationId: string;
@@ -258,18 +246,15 @@ export interface SyncStatusPayload {
 }
 
 
-// ---------- ERRORS ----------
+//  ERRORS 
 
 export interface SocketErrorPayload {
     type: string;
     message?: string;
-    data?: any;
+    data?: unknown;
 }
 
-
-// ============================================================================
 // SERVER → CLIENT MAP
-// ============================================================================
 
 export interface ServerToClientEvents {
     // Messages
@@ -320,10 +305,7 @@ export interface ServerToClientEvents {
     [SocketEvents.ERROR_AUTH]: (data: SocketErrorPayload) => void;
 }
 
-
-// ============================================================================
 // CLIENT → SERVER MAP
-// ============================================================================
 
 export interface ClientToServerEvents {
     // Messages

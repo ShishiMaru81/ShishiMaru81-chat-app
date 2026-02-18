@@ -37,6 +37,7 @@ interface ChatStore {
     updateMessageReactions: (conversationId: string, updated: UIMessage) => void;
     clearTempMessages: (conversationId: string) => void;
     updateEditedMessage: (conversationId: string, messageId: string, newText: string) => void;
+    repliedTo: Record<string, UIMessage | null>;
 
     // conversation helpers
     updateLastMessage: (conversationId: string, msg: UIMessage) => void;
@@ -53,10 +54,13 @@ interface ChatStore {
     clearEditingMessage: () => void;
 }
 
-const idOf = (m: { _id: any } | string): string => {
+const idOf = (
+    m: { _id?: string | { toString(): string } } | string | null | undefined
+): string => {
     if (typeof m === "string") return m;
-    if (!m || m._id === undefined || m._id === null) return "";
-    return typeof m._id === "string" ? m._id : String(m._id);
+    if (!m || m._id == null) return "";
+    const id = m._id;
+    return typeof id === "string" ? id : id.toString();
 };
 
 const isTempId = (id: string) => id.startsWith("temp_");
@@ -344,6 +348,7 @@ const useChatStore = create<ChatStore>((set) => ({
                     : conversations,
             };
         }),
+    repliedTo: {},
 }));
 
 export default useChatStore;

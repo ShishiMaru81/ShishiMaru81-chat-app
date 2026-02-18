@@ -1,9 +1,9 @@
-import { MessageDTO } from "../dto/message.dto";
+import { MessageDTO } from "../dto/message.dto.js";
 
 export function isMessageDTO(value: unknown): value is MessageDTO {
     if (!value || typeof value !== "object") return false;
 
-    const v = value as any;
+    const v = value as MessageDTO;
 
     return (
         typeof v._id === "string" &&
