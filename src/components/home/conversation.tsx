@@ -75,7 +75,7 @@ const Conversation = ({ conversation }: ConversationProps) => {
 
                         <span className="text-xs text-gray-500 ml-auto">
                             {formatDate(
-                                (lastMessage?.createdAt
+                                (conversation?.updatedAt
                                 ) ??
                                 (conversation.createdAt
                                 ) ??
