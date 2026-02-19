@@ -130,7 +130,7 @@ const MessageInput = () => {
             isTemp: true,
         };
 
-        addMessage(tempId, tempMessage);
+        addMessage(sel, tempMessage);
         setMsgText("");
 
         if (!isOnline || socket.disconnected) {
