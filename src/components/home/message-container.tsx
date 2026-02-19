@@ -125,7 +125,6 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
             setTypingUsers(prev => prev.filter(u => u !== userId));
         };
 
-        socket.on("message:new", handleNewMessage);
         socket.on("message:edited", handleEditMessage);
         socket.on("typing:start", handleTyping);
         socket.on("typing:stop", handleStopTyping);
