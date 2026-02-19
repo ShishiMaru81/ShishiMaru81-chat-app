@@ -67,16 +67,12 @@ const ChatBubble = ({
 }: ChatBubbleProps) => {
     const { selectedConversation, setEditingMessage } = useChatStore();
     const [showReactions, setShowReactions] = useState(false);
-    // const status = getMessageStatus(
-    //     message,
-    //     selectedConversation?.members.length ?? 0
-    // );
-
-    const isMine =
+    const senderId =
         typeof message.sender === "string"
-            ? message.sender === currentUserId
-            : isUser(message.sender) && String(message.sender._id) === currentUserId;
+            ? message.sender
+            : message.sender?._id;
 
+    const isMine = String(senderId) === String(currentUserId);
     // reactions: { emoji: string; users: (string | {_id:string})[] }[]
     const reactions =
         (message).reactions as
@@ -210,7 +206,7 @@ const ChatBubble = ({
     };
 
     return (
-        <div className={`flex ${isMine ? "justify-end" : "justify-start"} px-2`}>
+        <div className={`flex w-full ${isMine ? "justify-end" : "justify-start"} px-2`}>
             {/* Avatar only for others in group chats */}
             {!isMine && selectedConversation?.isGroup && isUser(message.sender) && (
                 <ChatBubbleAvatar
@@ -220,7 +216,10 @@ const ChatBubble = ({
                 />
             )}
 
-            <div className="relative flex flex-col items-end max-w-[70%] group">
+            <div
+                className={`relative flex flex-col max-w-[70%] group ${isMine ? "items-end" : "items-start"
+                    }`}
+            >
                 {/* iMessage-style floating reaction badges */}
                 {hasReactions && (
                     <div
