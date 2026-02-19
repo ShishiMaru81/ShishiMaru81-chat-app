@@ -77,39 +77,6 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
 
         // JOIN
 
-        const handleNewMessage = (data: unknown) => {
-            if (!isMessageDTO(data)) return;
-
-            const currentUserId = user?._id?.toString();
-            if (!currentUserId) return;
-
-            const senderId = String(data.sender._id);
-            const isOwn = senderId === currentUserId;
-
-            // Ignore own message:new
-            if (isOwn) return;
-
-            const normalized: UIMessage = {
-                ...data,
-                sender: {
-                    ...data.sender,
-                    _id: senderId,
-                },
-                createdAt: new Date(data.createdAt),
-                updatedAt: data.updatedAt ? new Date(data.updatedAt) : undefined,
-                status: "delivered",
-                isTemp: false,
-            };
-            const conversationId = data.conversationId;
-            if (conversationId != sel) return;
-
-            updateLastMessage(String(sel), normalized);
-            addMessage(String(sel), normalized);
-
-            if (!isOwn) {
-                markDelivered(data._id, Date.now());
-            }
-        };
         const handleEditMessage = (data: MessageEditPayload) => {
             updateEditedMessage(data.conversationId, data.messageId, data.text);
         }
@@ -147,7 +114,6 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
 
         return () => {
             socket.emit("conversation:leave", { conversationId: String(sel) });
-            socket.off("message:new", handleNewMessage);
             socket.off("message:edited", handleEditMessage);
             socket.off("typing:start", handleTyping);
             socket.off("typing:stop", handleStopTyping);
