@@ -74,12 +74,19 @@ const ChatBubble = ({
 
     const isMine = String(senderId) === String(currentUserId);
     // reactions: { emoji: string; users: (string | {_id:string})[] }[]
-    const reactions =
-        (message).reactions as
-        | { emoji: string; users: (string | { _id: string })[] }[]
-        | undefined;
+    const rawReactions = message.reactions ?? [];
 
-    const hasReactions = reactions && reactions.length > 0;
+    // Group by emoji
+    const groupedReactions = rawReactions.reduce((acc, r) => {
+        if (!acc[r.emoji]) {
+            acc[r.emoji] = [];
+        }
+
+        acc[r.emoji].push(...r.users); // spread array
+        return acc;
+    }, {} as Record<string, string[]>);
+
+    const hasReactions = Object.keys(groupedReactions).length > 0;
 
     const getRepliedPreview = () => {
         const replied = (message).repliedTo;
@@ -227,19 +234,36 @@ const ChatBubble = ({
                             } flex gap-1 z-20`}
                     >
                         <AnimatePresence>
-                            {reactions.map((r) => (
-                                <motion.span
-                                    key={r.emoji}
-                                    initial={{ scale: 0, y: 6, opacity: 0 }}
-                                    animate={{ scale: 1, y: 0, opacity: 1 }}
-                                    exit={{ scale: 0, opacity: 0 }}
-                                    transition={{ type: "spring", stiffness: 350, damping: 20 }}
-                                    className="px-2 py-[2px] text-[11px] rounded-full shadow bg-white dark:bg-gray-900"
-                                >
-                                    {r.emoji}
-                                    {r.users.length > 1 && ` ${r.users.length}`}
-                                </motion.span>
-                            ))}
+                            {Object.entries(groupedReactions).map(([emoji, users]) => {
+                                const reactedByMe = users.some(
+                                    (u) => {
+                                        const id =
+                                            typeof u === "string"
+                                                ? u
+                                                : u;
+
+                                        return id === currentUserId;
+                                    }
+                                );
+
+                                return (
+                                    <motion.span
+                                        key={emoji}
+                                        initial={{ scale: 0, y: 6, opacity: 0 }}
+                                        animate={{ scale: 1, y: 0, opacity: 1 }}
+                                        exit={{ scale: 0, opacity: 0 }}
+                                        transition={{ type: "spring", stiffness: 350, damping: 20 }}
+                                        className={`px-2 py-[2px] text-[11px] rounded-full shadow 
+                ${reactedByMe
+                                                ? "bg-blue-500 text-white"
+                                                : "bg-white dark:bg-gray-900"
+                                            }`}
+                                    >
+                                        {emoji}
+                                        {users.length > 1 && ` ${users.length}`}
+                                    </motion.span>
+                                );
+                            })}
                         </AnimatePresence>
                     </div>
                 )}
@@ -288,7 +312,7 @@ const ChatBubble = ({
                                             <Edit className="w-4 h-4 mr-2" /> Edit
                                         </DropdownMenuItem>)}
                                         <DropdownMenuItem
-                                            onClick={() => onDelete(message._id as string)}
+                                            onClick={() => onDelete(message._id)}
                                         >
                                             <Trash2 className="w-4 h-4 mr-2 text-red-500" /> Delete
                                         </DropdownMenuItem>
@@ -304,6 +328,7 @@ const ChatBubble = ({
                     <ReactionBar
                         onSelect={(emoji: string) => {
                             onReact(message, emoji);
+
                             setShowReactions(false);
                         }}
                     />

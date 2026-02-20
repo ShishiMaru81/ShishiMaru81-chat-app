@@ -6,7 +6,7 @@ import { socket } from "@/lib/socket/socketClient";
 import ChatBubble from "./chat-bubble";
 import ChatDaySeparator from "./ChatDaySeparator";
 import { useUser } from "@/context/UserContext";
-import { deleteMessage } from "@/lib/utils/api";
+import { deleteMessage, reactToMessage } from "@/lib/utils/api";
 import useSocketStore from "@/store/useSocketStore";
 import { MessageEditPayload } from "@/shared/types/SocketEvents";
 import { UIMessage } from "@/shared/types/ui-message";
@@ -64,7 +64,9 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
             leaveConversation(conversationId);
         };
     }, [conversationId, joinConversation, leaveConversation]);
-
+    const handleReact = async (message: UIMessage, emoji: string) => {
+        await reactToMessage(message, emoji);
+    }
 
     useEffect(() => {
         if (!sel) return;
@@ -90,21 +92,7 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
         socket.on("typing:start", handleTyping);
         socket.on("typing:stop", handleStopTyping);
 
-        socket.on("message:delete", ({ messageId }) => {
-            useChatStore.setState((state) => {
-                const msgs = state.messagesByConversation[conversationId] || [];
-                return {
-                    messagesByConversation: {
-                        ...state.messagesByConversation,
-                        [conversationId]: msgs.map((msg) =>
-                            msg._id.toString() === messageId
-                                ? { ...msg, isDeleted: true, text: "This message was deleted" }
-                                : msg
-                        ),
-                    },
-                };
-            });
-        });
+
 
         return () => {
             socket.emit("conversation:leave", { conversationId: String(sel) });
@@ -139,7 +127,7 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
                                 currentUserId={user?._id}
                                 onDelete={deleteMessage}
                                 onReply={() => { }}
-                                onReact={(id, emoji) => socket.emit('message:reaction', { userId: user?._id?.toString(), messageId: String(id), emoji })} // 👈 socket.emit
+                                onReact={handleReact}
                             />
                         </div>
                     );
