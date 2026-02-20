@@ -1,6 +1,8 @@
 // lib/api.ts
 //import axios from "axios";
 
+import { UIMessage } from "@/shared/types/ui-message";
+
 // Client-side call to fetch user info from your API
 export async function getMe() {
     const res = await fetch("/api/me");
@@ -92,11 +94,12 @@ export async function deleteMessage(id: string) {
     //socket.emit("message:delete", { messageId: id });
     return await res.json();
 }
-export async function reactToMessage(id: string, emoji: string, userId: string) {
-    const res = await fetch(`/api/messages/${id}/react`, {
+export async function reactToMessage(message: UIMessage, emoji: string) {
+    const { _id } = message;
+    const res = await fetch(`/api/messages/${_id}/react`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emoji, userId }),
+        body: JSON.stringify({ emoji }),
     });
     if (!res.ok) throw new Error("Failed to react to message");
     return await res.json();
