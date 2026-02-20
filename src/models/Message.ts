@@ -6,7 +6,7 @@ export type MessageType = "text" | "image" | "video" | "audio" | "voice" | "file
 
 export interface IReaction {
     emoji: string;
-    users: mongoose.Types.ObjectId[] | (mongoose.Types.ObjectId | IUser)[];
+    users: (mongoose.Types.ObjectId | IUser)[];
 }
 export interface IDeliveredTo {
     userId: mongoose.Types.ObjectId;
