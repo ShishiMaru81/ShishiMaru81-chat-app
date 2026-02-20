@@ -37,6 +37,7 @@ interface ChatStore {
     updateMessageReactions: (conversationId: string, updated: UIMessage) => void;
     clearTempMessages: (conversationId: string) => void;
     updateEditedMessage: (conversationId: string, messageId: string, newText: string) => void;
+    updateDeletedMessage: (message: UIMessage) => void;
     repliedTo: Record<string, UIMessage | null>;
 
     // conversation helpers
@@ -237,6 +238,30 @@ const useChatStore = create<ChatStore>((set) => ({
                     ...state.messagesByConversation,
                     [conversationId]: current.filter((m) => idOf(m) !== messageId),
                 },
+            };
+        }),
+    updateDeletedMessage: (updatedMessage: UIMessage) =>
+        set((state) => {
+            const convId = updatedMessage.conversationId;
+            const messages = state.messagesByConversation[convId];
+            if (!messages) return {};
+
+            const updated = messages.map((m) =>
+                m._id === updatedMessage._id ? updatedMessage : m
+            );
+
+            const updatedConversations = state.conversations.map((conv) =>
+                conv._id === convId
+                    ? { ...conv, lastMessage: updated[updated.length - 1] }
+                    : conv
+            );
+
+            return {
+                messagesByConversation: {
+                    ...state.messagesByConversation,
+                    [convId]: updated,
+                },
+                conversations: updatedConversations,
             };
         }),
 
