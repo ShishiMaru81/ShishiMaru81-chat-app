@@ -1,6 +1,7 @@
 import { MessageDTO } from "../../shared/dto/message.dto.js";
 import { IMessagePopulated } from "../../models/Message.js";
 import type { ClientReaction } from "../../shared/types/client-message.js";
+import { ClientUser } from "../../shared/types/user.js";
 
 // src/server/normalizers/message.normalizer.ts
 export function normalizeMessage(doc: IMessagePopulated): MessageDTO {
@@ -78,7 +79,7 @@ export function normalizeMessage(doc: IMessagePopulated): MessageDTO {
     };
 }
 export function normalizeReactions(
-    reactions?: Record<string, string[]>
+    reactions?: Record<string, ClientUser[]>
 ): ClientReaction[] | undefined {
     if (!reactions) return undefined;
 
