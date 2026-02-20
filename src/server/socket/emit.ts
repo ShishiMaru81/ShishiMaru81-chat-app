@@ -13,3 +13,10 @@ export function emitToSocketServer(event: string, payload: unknown) {
 
     io.emit(event, payload);
 }
+export function emitToConversation(conversationId: string, event: string, payload: unknown) {
+    if (!io) {
+        throw new Error("Socket.IO server not initialized");
+    }
+
+    io.to(`conversation:${conversationId}`).emit(event, payload);
+}
