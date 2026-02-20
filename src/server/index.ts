@@ -4,8 +4,7 @@ import http from "http";
 import cors from "cors";
 import { initSocket } from "./socket/index.js";
 import { emitToConversation } from "./socket/emit.js";
-import { socket } from "@/lib/socket/socketClient.jsx";
-import { SocketEvents } from "@/shared/types/SocketEvents.js";
+import { SocketEvents } from "../shared/types/SocketEvents.js";
 
 
 const app = express();
@@ -31,6 +30,13 @@ app.post("/internal/message-deleted", (req, res) => {
 
     return res.json({ success: true });
 })
+app.post("/internal/message-reaction", (req, res) => {
+    const { conversationId, payload } = req.body;
+
+    emitToConversation(conversationId, "message:reaction", payload);
+
+    res.json({ success: true });
+});
 
 server.listen(3001, () => {
     console.log("🚀 Server running on http://localhost:3001");
