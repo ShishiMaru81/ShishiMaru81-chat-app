@@ -1,25 +1,7 @@
 import { MessageDTO } from "../../shared/dto/message.dto.js";
 import { IMessagePopulated } from "../../models/Message.js";
-import type { ClientReaction } from "../../shared/types/client-message.js";
-import { ClientUser } from "../../shared/types/user.js";
 
-// src/server/normalizers/message.normalizer.ts
 export function normalizeMessage(doc: IMessagePopulated): MessageDTO {
-    // DEBUG: Log reactions to diagnose missing reactions
-    if (process.env.NODE_ENV !== 'production') {
-        // eslint-disable-next-line no-console
-        console.log('normalizeMessage reactions:', JSON.stringify(doc.reactions));
-    }
-    type ReactionUser =
-        | string
-        | { _id: { toString(): string } }
-        | { toString(): string };
-    type DeliveryEntry =
-        | { user?: { toString(): string } }
-        | { toString(): string };
-    type SeenEntry =
-        | { user?: { toString(): string } }
-        | { toString(): string };
     return {
         _id: doc._id.toString(),
         conversationId: doc.conversationId.toString(),
@@ -48,17 +30,21 @@ export function normalizeMessage(doc: IMessagePopulated): MessageDTO {
             ? normalizeReactions(
                 Object.fromEntries(
                     Object.entries(doc.reactions).map(([emoji, users]) => {
-                        let userArr: any[] = [];
+                        let userArr: (string | { _id: { toString(): string } } | { toString(): string })[] = [];
                         if (Array.isArray(users)) {
                             userArr = users;
-                        } else if (users && typeof users === 'object' && typeof (users as Map<any, any>).values === 'function') {
-                            userArr = Array.from((users as Map<any, any>).values());
+                        } else if (users && typeof users === 'object' && typeof (users as { values?: () => unknown }).values === 'function') {
+                            // If users is a Map-like object, convert to array and filter/map to correct type
+                            userArr = Array.from((users as { values: () => Iterable<unknown> }).values())
+                                .filter((u): u is string | { _id: { toString(): string } } | { toString(): string } =>
+                                    typeof u === "string" || (typeof u === "object" && u !== null && ("_id" in u || "toString" in u))
+                                );
                         } else if (users) {
                             userArr = [users];
                         }
                         return [
                             emoji,
-                            userArr.map((user: any) =>
+                            userArr.map((user: string | { _id: { toString(): string } } | { toString(): string }) =>
                                 typeof user === "string"
                                     ? user
                                     : "_id" in user
@@ -72,18 +58,18 @@ export function normalizeMessage(doc: IMessagePopulated): MessageDTO {
             : [],
 
         seenBy: doc.seenBy
-            ? doc.seenBy.map((entry: SeenEntry) =>
-                "user" in entry && entry.user
-                    ? entry.user.toString()
-                    : entry.toString()
+            ? doc.seenBy.map((entry) =>
+                typeof entry === "object" && entry !== null && "user" in entry && entry.user
+                    ? (entry.user as { toString(): string }).toString()
+                    : (entry as { toString(): string }).toString()
             )
             : [],
 
         deliveredTo: doc.deliveredTo
-            ? doc.deliveredTo.map((entry: DeliveryEntry) =>
-                "user" in entry && entry.user
-                    ? entry.user.toString()
-                    : entry.toString()
+            ? doc.deliveredTo.map((entry) =>
+                typeof entry === "object" && entry !== null && "user" in entry && entry.user
+                    ? (entry.user as { toString(): string }).toString()
+                    : (entry as { toString(): string }).toString()
             )
             : [],
         repliedTo: doc.repliedTo ? {
@@ -98,22 +84,26 @@ export function normalizeMessage(doc: IMessagePopulated): MessageDTO {
     };
 }
 export function normalizeReactions(
-    reactions?: Record<string, any[]>
+    reactions?: Record<string, (string | { _id: { toString(): string } } | { toString(): string })[]>
 ): { emoji: string; users: string[] }[] | undefined {
     if (!reactions) return undefined;
 
     return Object.entries(reactions).map(([emoji, users]) => {
-        let userArr: any[] = [];
+        let userArr: (string | { _id: { toString(): string } } | { toString(): string })[] = [];
         if (Array.isArray(users)) {
             userArr = users;
-        } else if (users && typeof users === 'object' && typeof (users as Map<any, any>).values === 'function') {
-            userArr = Array.from((users as Map<any, any>).values()); // handle Map
+        } else if (users && typeof users === 'object' && typeof (users as { values?: () => unknown }).values === 'function') {
+            // If users is a Map-like object, convert to array and filter/map to correct type
+            userArr = Array.from((users as { values: () => Iterable<unknown> }).values())
+                .filter((u): u is string | { _id: { toString(): string } } | { toString(): string } =>
+                    typeof u === "string" || (typeof u === "object" && u !== null && ("_id" in u || "toString" in u))
+                );
         } else if (users) {
             userArr = [users];
         }
         return {
             emoji,
-            users: userArr.map((user: any) =>
+            users: userArr.map((user) =>
                 typeof user === "string"
                     ? user
                     : "_id" in user
