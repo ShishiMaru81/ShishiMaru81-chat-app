@@ -8,10 +8,10 @@ export interface ClientUser {
     profilePicture?: string;
     role: 'user' | 'moderator' | 'admin';
     status: 'active' | 'banned';
-    lastSeen: Date;
+    lastSeen: string;
     isVerified: boolean;
-    verifiedAt?: Date;
-    conversations: ClientConversation[];
-    createdAt: Date;
-    updatedAt: Date;
+    verifiedAt?: string;
+    conversations: string[]; // Only store conversation IDs for FE
+    createdAt: string;
+    updatedAt: string;
 }
