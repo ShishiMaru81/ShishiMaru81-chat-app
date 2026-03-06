@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
         const cursor = searchParams.get("cursor") || undefined;
 
         const messages = await getPaginatedMessages(conversationId, cursor);
-        const clientMessages = messages.map(normalizeMessage);
+        const clientMessages = (Array.isArray(messages) ? messages : []).map(normalizeMessage);
         // Always return an array, even if empty:
         return NextResponse.json(clientMessages, { status: 200 });
     } catch (err) {
