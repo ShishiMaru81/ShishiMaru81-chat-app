@@ -33,17 +33,21 @@ export async function PATCH(
         }
 
         // ✅ idempotent check
-        // const alreadyDelivered = message.deliveredTo.some(
-        //     d=> d.userId.toString() === userId
-        // );
-
-        // if (!alreadyDelivered) {
-        message.deliveredTo.push({
-            userId,
-            at: at ? new Date(at) : new Date(),
-        });
-        await message.save();
-        // }
+        const alreadyDelivered =
+            Array.isArray(message.deliveredTo) &&
+            message.deliveredTo.some(
+                (d: { userId: string; at: Date }) => d.userId === userId
+            );
+        if (!alreadyDelivered) {
+            if (!Array.isArray(message.deliveredTo)) {
+                message.deliveredTo = [];
+            }
+            message.deliveredTo.push({
+                userId,
+                at: at ? new Date(at) : new Date(),
+            });
+            await message.save();
+        }
 
         return NextResponse.json({ success: true });
     } catch (error) {
