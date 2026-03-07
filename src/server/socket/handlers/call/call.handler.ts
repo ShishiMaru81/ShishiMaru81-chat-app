@@ -19,7 +19,7 @@ type Socket = import("socket.io").Socket<
 export function callHandler(io: IO, socket: Socket) {
     socket.on(SocketEvents.CALL_OFFER, ({ to, offer }: CallOfferPayload) => {
         io.to(to).emit(SocketEvents.CALL_OFFER, {
-            from: socket.data.user._id,
+            from: socket.data.userId,
             to,
             offer,
         });
@@ -27,7 +27,7 @@ export function callHandler(io: IO, socket: Socket) {
 
     socket.on(SocketEvents.CALL_ANSWER, ({ to, answer }: CallAnswerPayload) => {
         io.to(to).emit(SocketEvents.CALL_ANSWER, {
-            from: socket.data.user._id,
+            from: socket.data.userId,
             to,
             answer,
         });
@@ -35,14 +35,14 @@ export function callHandler(io: IO, socket: Socket) {
 
     socket.on(SocketEvents.CALL_END, ({ to }: CallEndPayload) => {
         io.to(to).emit(SocketEvents.CALL_END, {
-            from: socket.data.user._id,
+            from: socket.data.userId,
             to,
         });
     });
 
     socket.on(SocketEvents.CALL_BUSY, ({ to }: CallRingingPayload) => {
         io.to(to).emit(SocketEvents.CALL_BUSY, {
-            from: socket.data.user._id,
+            from: socket.data.userId,
             to,
         });
     });

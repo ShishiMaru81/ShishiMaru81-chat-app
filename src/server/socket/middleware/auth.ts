@@ -7,8 +7,11 @@ export function socketAuth(
         userId?: string;
         isAdmin?: boolean;
     };
+    if (!userId) {
+        return next(new Error("Unauthorized"));
+    }
 
-    socket.data.userId = userId ?? socket.id;
+    socket.data.userId = userId;
     socket.data.isAdmin = Boolean(isAdmin);
 
     next();

@@ -40,10 +40,7 @@ export function registerMessageHandlers(io: Server, socket: Socket) {
         }
         const normalizedMessage = data;
         conversationMembers.forEach((userId: string) => {
-            io.to(`user:${userId}`).emit(SocketEvents.MESSAGE_NEW, {
-                ...data,
-                message: normalizedMessage,
-            });
+            io.to(`user:${userId}`).emit(SocketEvents.MESSAGE_NEW, normalizedMessage);
         });
         io.to("admins").emit("dashboard:update", { totalMessagesToday: 1 });
         ack?.({ ok: true });

@@ -127,7 +127,6 @@ export interface MessageUnsendPayload {
 export interface MessageReactionPayload {
     messageId: string;
     emoji: string;
-    userId: string;
 }
 
 
