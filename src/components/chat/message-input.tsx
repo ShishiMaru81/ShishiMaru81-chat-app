@@ -238,7 +238,10 @@ const MessageInput = () => {
                             <button
                                 type="button"
                                 className="ml-2 text-xs text-blue-400 hover:underline"
-                                onClick={clearEditingMessage}
+                                onClick={() => {
+                                    clearEditingMessage()
+                                    setMsgText("")
+                                }}
                             >
                                 Cancel
                             </button>

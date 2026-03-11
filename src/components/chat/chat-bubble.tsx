@@ -71,7 +71,7 @@ const ChatBubble = ({
 }: ChatBubbleProps) => {
     const { selectedConversation, setEditingMessage } = useChatStore();
     const [showReactions, setShowReactions] = useState(false);
-    const [hovered, setHovered] = useState(false);
+    //const [hovered, setHovered] = useState(false);
     const senderId =
         typeof message.sender === "string"
             ? message.sender
@@ -220,8 +220,6 @@ const ChatBubble = ({
     return (
         <div
             className={`flex w-full ${isMine ? "justify-end" : "justify-start"} px-1 sm:px-2`}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
         >
             {/* Avatar only for others in group chats, and only if showAvatar */}
             {!isMine && selectedConversation?.isGroup && isUser(message.sender) && showAvatar && (
@@ -281,27 +279,6 @@ const ChatBubble = ({
                     {/* Main content */}
                     {renderContent()}
 
-                    {/* Hover actions */}
-                    {hovered && !message.isDeleted && (
-                        <div className="absolute top-2 right-2 flex gap-2 z-20">
-                            <button className="hover:bg-gray-700 rounded-full p-1" onClick={() => setShowReactions(true)}>
-                                <Smile className="w-4 h-4 text-blue-400" />
-                            </button>
-                            <button className="hover:bg-gray-700 rounded-full p-1" onClick={() => onReply(message)}>
-                                <MessageCircle className="w-4 h-4 text-green-400" />
-                            </button>
-                            {isMine && message.messageType === "text" && (
-                                <button className="hover:bg-gray-700 rounded-full p-1" onClick={() => setEditingMessage(message)}>
-                                    <Edit className="w-4 h-4 text-yellow-400" />
-                                </button>
-                            )}
-                            {isMine && (
-                                <button className="hover:bg-gray-700 rounded-full p-1" onClick={() => onDelete(message._id)}>
-                                    <Trash2 className="w-4 h-4 text-red-400" />
-                                </button>
-                            )}
-                        </div>
-                    )}
                     {/* Dropdown for message actions (fallback for mobile) */}
                     {("isDeleted" in message ? !message.isDeleted : true) && (
                         <DropdownMenu>
