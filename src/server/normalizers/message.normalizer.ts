@@ -28,32 +28,9 @@ export function normalizeMessage(doc: IMessagePopulated): MessageDTO {
 
         reactions: doc.reactions
             ? normalizeReactions(
-                Object.fromEntries(
-                    Object.entries(doc.reactions).map(([emoji, users]) => {
-                        let userArr: (string | { _id: { toString(): string } } | { toString(): string })[] = [];
-                        if (Array.isArray(users)) {
-                            userArr = users;
-                        } else if (users && typeof users === 'object' && typeof (users as { values?: () => unknown }).values === 'function') {
-                            // If users is a Map-like object, convert to array and filter/map to correct type
-                            userArr = Array.from((users as { values: () => Iterable<unknown> }).values())
-                                .filter((u): u is string | { _id: { toString(): string } } | { toString(): string } =>
-                                    typeof u === "string" || (typeof u === "object" && u !== null && ("_id" in u || "toString" in u))
-                                );
-                        } else if (users) {
-                            userArr = [users];
-                        }
-                        return [
-                            emoji,
-                            userArr.map((user: string | { _id: { toString(): string } } | { toString(): string }) =>
-                                typeof user === "string"
-                                    ? user
-                                    : "_id" in user
-                                        ? user._id.toString()
-                                        : user.toString()
-                            )
-                        ];
-                    })
-                )
+                doc.reactions instanceof Map
+                    ? Object.fromEntries(doc.reactions)
+                    : doc.reactions
             )
             : [],
 
@@ -84,32 +61,18 @@ export function normalizeMessage(doc: IMessagePopulated): MessageDTO {
     };
 }
 export function normalizeReactions(
-    reactions?: Record<string, (string | { _id: { toString(): string } } | { toString(): string })[]>
-): { emoji: string; users: string[] }[] | undefined {
-    if (!reactions) return undefined;
+    reactions?: Record<string, unknown[]>
+): { emoji: string; users: string[] }[] {
+    if (!reactions) return [];
 
-    return Object.entries(reactions).map(([emoji, users]) => {
-        let userArr: (string | { _id: { toString(): string } } | { toString(): string })[] = [];
-        if (Array.isArray(users)) {
-            userArr = users;
-        } else if (users && typeof users === 'object' && typeof (users as { values?: () => unknown }).values === 'function') {
-            // If users is a Map-like object, convert to array and filter/map to correct type
-            userArr = Array.from((users as { values: () => Iterable<unknown> }).values())
-                .filter((u): u is string | { _id: { toString(): string } } | { toString(): string } =>
-                    typeof u === "string" || (typeof u === "object" && u !== null && ("_id" in u || "toString" in u))
-                );
-        } else if (users) {
-            userArr = [users];
-        }
-        return {
-            emoji,
-            users: userArr.map((user) =>
-                typeof user === "string"
-                    ? user
-                    : "_id" in user
-                        ? user._id.toString()
-                        : user.toString()
-            ),
-        };
-    });
+    return Object.entries(reactions).map(([emoji, users]) => ({
+        emoji,
+        users: (users || []).map((user: any) =>
+            typeof user === "string"
+                ? user
+                : user?._id
+                    ? user._id.toString()
+                    : user?.toString()
+        ),
+    }));
 }
