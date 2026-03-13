@@ -44,30 +44,40 @@ export async function POST(
 
 
         // Step 1: Remove user from all emoji arrays
+        const messageDoc = await Message.findById(id).select("reactions");
+
+        let alreadyReactedWithSameEmoji = false;
+
+        if (messageDoc?.reactions instanceof Map) {
+            const users = messageDoc.reactions.get(emoji) || [];
+
+            alreadyReactedWithSameEmoji = users.some(
+                (uid: mongoose.Types.ObjectId) =>
+                    uid.toString() === userId.toString()
+            );
+        }
+
+        /* Remove user from all emojis */
         const pullUpdate: Record<string, mongoose.Types.ObjectId> = {};
-        const messageDoc = await Message.findById(id).select('reactions');
-        if (messageDoc && messageDoc.reactions) {
-            for (const emojiKey of Object.keys(messageDoc.reactions)) {
-                pullUpdate[`reactions.${emojiKey}`] = userId;
+
+        if (messageDoc?.reactions instanceof Map) {
+            for (const key of messageDoc.reactions.keys()) {
+                pullUpdate[`reactions.${key}`] = userId;
             }
         }
+
         await Message.updateOne({ _id: id }, { $pull: pullUpdate });
 
-        // Step 2: Check if user was already in the target emoji (toggle off)
-        const refreshed = await Message.findById(id).select('reactions');
-        const alreadyReacted = Array.isArray(refreshed?.reactions?.[emoji]) &&
-            refreshed.reactions[emoji].some((uid: mongoose.Types.ObjectId | string) => String(uid) === String(userId));
-
-        if (!alreadyReacted) {
-            // Toggle on: add user to target emoji
-            await Message.updateOne({ _id: id }, { $addToSet: { [`reactions.${emoji}`]: userId } });
+        /* If same emoji → toggle off */
+        if (!alreadyReactedWithSameEmoji) {
+            await Message.updateOne(
+                { _id: id },
+                { $addToSet: { [`reactions.${emoji}`]: userId } }
+            );
         }
-
         // Populate sender for normalization and return updated reactions
-        const populated = await Message.findById(id)
-            .populate("sender");
-
-        const normalized = normalizeMessage(populated);
+        const populated = await Message.findById(id).populate("sender");
+        const normalized = normalizeMessage(populated.toObject());
 
         // Emit socket event
         await fetch(`${process.env.NEXT_PUBLIC_SOCKET_URL}/internal/message-reaction`, {
