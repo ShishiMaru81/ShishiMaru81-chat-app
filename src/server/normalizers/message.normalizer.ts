@@ -1,6 +1,9 @@
 import { MessageDTO } from "../../shared/dto/message.dto.js";
 import { IMessagePopulated } from "../../models/Message.js";
 
+type Stringable = { toString(): string };
+type ReactionUser = string | (Stringable & { _id?: string | Stringable });
+
 export function normalizeMessage(doc: IMessagePopulated): MessageDTO {
     return {
         _id: doc._id.toString(),
@@ -61,18 +64,20 @@ export function normalizeMessage(doc: IMessagePopulated): MessageDTO {
     };
 }
 export function normalizeReactions(
-    reactions?: Record<string, unknown[]>
+    reactions?: Record<string, ReactionUser[]>
 ): { emoji: string; users: string[] }[] {
     if (!reactions) return [];
 
     return Object.entries(reactions).map(([emoji, users]) => ({
         emoji,
-        users: (users || []).map((user: any) =>
+        users: (users || []).map((user) =>
             typeof user === "string"
                 ? user
-                : user?._id
-                    ? user._id.toString()
-                    : user?.toString()
+                : user._id
+                    ? typeof user._id === "string"
+                        ? user._id
+                        : user._id.toString()
+                    : user.toString()
         ),
     }));
 }

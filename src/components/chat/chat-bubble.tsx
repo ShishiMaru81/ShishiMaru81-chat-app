@@ -239,7 +239,7 @@ const ChatBubble = ({
                     </div>
                 )}
                 {/* Modern SaaS-style reaction badges */}
-                {hasReactions && (
+                {hasReactions && !message.isDeleted && (
                     <div className={`absolute -top-3 ${isMine ? "right-4" : "left-4"} flex gap-1 z-20`}>
                         <AnimatePresence>
                             {Object.entries(groupedReactions).map(([emoji, users]) => {
