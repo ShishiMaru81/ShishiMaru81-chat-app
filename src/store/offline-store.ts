@@ -29,7 +29,6 @@ export const useOfflineStore = create<OfflineStore>((set, get) => ({
     },
     loadQueue: async () => {
         const messages = await offlineDB.offlineMessages.toArray();
-        console.log('[OfflineDB] Loaded messages:', messages);
         set({ offlineQueue: messages });
     },
 
