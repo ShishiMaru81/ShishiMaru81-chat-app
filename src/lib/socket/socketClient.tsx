@@ -27,7 +27,12 @@ export function getSocket(): TypedSocket {
         socketInstance = io(getClientSocketUrl(), {
             path: "/api/socket",
             autoConnect: false, // you control when to connect
-            transports: ["websocket"], // prefer ws
+            transports: ["websocket", "polling"],
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 7000,
+            timeout: 20000,
             withCredentials: true,
         });
     }
@@ -102,11 +107,17 @@ function convertDTOToUI(dto: MessageDTO): UIMessage {
         throw new Error("Invalid DTO: missing sender");
     }
 
+    const status: UIMessage["status"] = dto.seen || (dto.seenBy?.length ?? 0) > 0
+        ? "seen"
+        : dto.delivered || (dto.deliveredTo?.length ?? 0) > 0
+            ? "delivered"
+            : "sent";
+
     return {
         ...dto,
         createdAt: new Date(dto.createdAt),
         updatedAt: dto.updatedAt ? new Date(dto.updatedAt) : undefined,
-        status: "sent",
+        status,
         isTemp: false,
     };
 }
