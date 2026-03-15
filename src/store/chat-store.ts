@@ -53,6 +53,9 @@ interface ChatStore {
     editingMessage: UIMessage | null;
     setEditingMessage: (msg: ChatStore['editingMessage']) => void;
     clearEditingMessage: () => void;
+
+    setReplyTo: (conversationId: string, msg: UIMessage | null) => void;
+    clearReplyTo: (conversationId: string) => void;
 }
 
 const idOf = (
@@ -379,6 +382,14 @@ const useChatStore = create<ChatStore>((set) => ({
             };
         }),
     repliedTo: {},
+    setReplyTo: (conversationId, msg) =>
+        set((state) => ({
+            repliedTo: { ...state.repliedTo, [conversationId]: msg },
+        })),
+    clearReplyTo: (conversationId) =>
+        set((state) => ({
+            repliedTo: { ...state.repliedTo, [conversationId]: null },
+        })),
 }));
 
 export default useChatStore;

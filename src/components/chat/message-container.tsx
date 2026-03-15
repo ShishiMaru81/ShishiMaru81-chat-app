@@ -19,7 +19,7 @@ interface MessageContainerProps {
 const MessageContainer = ({ conversationId }: MessageContainerProps) => {
     const sel = useChatStore(s => s.selectedConversationId);
     let lastDate: string | null = null;
-    const { messagesByConversation, addMessage, setMessages, setHasMore, updateEditedMessage, updateLastMessage } = useChatStore();
+    const { messagesByConversation, addMessage, setMessages, setHasMore, updateEditedMessage, updateLastMessage, setReplyTo } = useChatStore();
     const topRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const { user } = useUser();
@@ -172,7 +172,7 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
                                     message={msg}
                                     currentUserId={user?._id}
                                     onDelete={deleteMessage}
-                                    onReply={() => { }}
+                                    onReply={(msg) => setReplyTo(conversationId, msg)}
                                     onReact={handleReact}
                                     showAvatar={group.showAvatar && i === 0}
                                     showUsername={group.showUsername && i === 0}

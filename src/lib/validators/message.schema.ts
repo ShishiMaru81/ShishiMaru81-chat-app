@@ -5,7 +5,8 @@ export const CreateMessageSchema = z.object({
     content: z.string().min(1),
     conversationId: z.string(),
     tempId: z.string().optional(),
-    messageType: z.enum(["text", "image", "video"]).optional().default("text")
+    messageType: z.enum(["text", "image", "video"]).optional().default("text"),
+    replyTo: z.string().optional(),
 })
 
 

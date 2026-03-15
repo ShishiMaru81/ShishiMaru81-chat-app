@@ -15,6 +15,11 @@ export async function getPaginatedMessages(conversationId: string, cursor?: stri
         .limit(limit)
         .populate("sender", "username email profilePicture status _id")
         .populate("reactions.users", "username email profilePicture status _id")
+        .populate({
+            path: "repliedTo",
+            select: "content sender messageType",
+            populate: { path: "sender", select: "username profilePicture _id" },
+        })
         .lean<IMessagePopulated[]>();
 
     return messages;

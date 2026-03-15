@@ -4,28 +4,38 @@ import * as messageRepo from "@/lib/repositories/message.repo";
 import { CreateMessageInput } from "../validators/message.schema";
 import { Types } from "mongoose";
 import { Conversation } from "@/models/Conversation";
-import Message from "@/models/Message";
+import Message, { IMessagePopulated } from "@/models/Message";
 //import { socket } from "@/lib/socket/socketClient";
 
 export async function createMessage(data: CreateMessageInput, senderId: string) {
     // correctly map senderId → sender
-    const toSave = {
+    const toSave: Parameters<typeof messageRepo.saveMessage>[0] = {
         sender: new Types.ObjectId(senderId),
         conversationId: new Types.ObjectId(data.conversationId),
         content: data.content,
         messageType: data.messageType ?? "text",
+        ...(data.replyTo ? { repliedTo: new Types.ObjectId(data.replyTo) } : {}),
     };
     const conversation = await Conversation.findById(data.conversationId);
     if (!conversation) {
         throw new Error("Conversation not found");
     }
-    //console.log("🔊 [Service] Emitting to room", data.conversationId, toSave);
-    //socket.emit("message:new", saved);
     const saved = await messageRepo.saveMessage(toSave);
     conversation.lastMessage = saved;
     await conversation.save();
 
-    return saved;
+    // Populate sender and repliedTo so normalizeMessage can serialize them safely.
+    const populated = await Message.findById(saved._id)
+        .populate("sender", "username profilePicture _id")
+        .populate({
+            path: "repliedTo",
+            select: "content sender messageType",
+            populate: { path: "sender", select: "username profilePicture _id" },
+        })
+        .lean<IMessagePopulated>();
+
+    if (!populated) throw new Error("Failed to retrieve saved message");
+    return populated;
 }
 
 interface Reaction {

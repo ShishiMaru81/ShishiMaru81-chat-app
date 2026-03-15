@@ -135,7 +135,15 @@ const ChatBubble = ({
         }
 
         return (
-            <div className="text-xs text-gray-500 dark:text-gray-300 bg-black/5 dark:bg-white/5 rounded-md p-2 mb-2 border-l-2 border-gray-300 dark:border-gray-700">
+            <div
+                className="text-xs text-gray-500 dark:text-gray-300 bg-black/5 dark:bg-white/5 rounded-md p-2 mb-2 border-l-2 border-gray-300 dark:border-gray-700 cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 transition"
+                onClick={() => {
+                    const origId = message.repliedTo?._id;
+                    if (origId) {
+                        document.getElementById(origId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    }
+                }}
+            >
                 <div className="font-semibold mb-0.5">{name}</div>
                 <div className="line-clamp-2 break-words opacity-80">{snippet}</div>
             </div>
@@ -219,6 +227,7 @@ const ChatBubble = ({
 
     return (
         <div
+            id={String(message._id)}
             className={`flex w-full ${isMine ? "justify-end" : "justify-start"} px-1 sm:px-2`}
         >
             {/* Avatar only for others in group chats, and only if showAvatar */}

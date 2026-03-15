@@ -32,7 +32,7 @@ const MessageInput = () => {
     const [showImageUpload, setShowImageUpload] = useState(false);
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    const { selectedConversation, addMessage, updateLastMessage, replaceTempMessage, editingMessage, clearEditingMessage, updateEditedMessage, repliedTo } = useChatStore();
+    const { selectedConversation, addMessage, updateLastMessage, replaceTempMessage, editingMessage, clearEditingMessage, updateEditedMessage, repliedTo, clearReplyTo } = useChatStore();
     const sel = useChatStore((s) => s.selectedConversationId);
     const isOnline = useNetworkStatus();
     const { addToQueue } = useOfflineStore();
@@ -113,6 +113,7 @@ const MessageInput = () => {
         }
 
 
+        const replyToId = activeReply?._id;
         const tempId = uuidv4();
         const tempMessage: UIMessage = {
             _id: tempId,
@@ -128,10 +129,18 @@ const MessageInput = () => {
             isDeleted: false,
             createdAt: new Date(),
             isTemp: true,
+            ...(activeReply ? {
+                repliedTo: {
+                    _id: String(activeReply._id),
+                    content: activeReply.content,
+                    sender: activeReply.sender,
+                },
+            } : {}),
         };
 
         addMessage(sel, tempMessage);
         setMsgText("");
+        if (activeReply && sel) clearReplyTo(String(sel));
 
         if (!isOnline || socket.disconnected) {
             await addToQueue({
@@ -155,6 +164,7 @@ const MessageInput = () => {
                 body: JSON.stringify({
                     content: tempMessage.content,
                     conversationId: sel,
+                    ...(replyToId ? { replyTo: replyToId } : {}),
                 }),
             });
 
@@ -233,14 +243,30 @@ const MessageInput = () => {
                 <div className="flex-1 relative">
                     {(activeReply || editingMessage) && (
                         <div className="absolute -top-10 left-0 w-full bg-gray-800 text-xs text-gray-200 p-2 rounded-t-md flex justify-between items-center z-10">
-                            {activeReply && <span>Replying to: <span className="font-semibold">{activeReply.content}</span></span>}
+                            {activeReply && (
+                                <span>
+                                    Replying to{" "}
+                                    <span className="font-semibold">
+                                        {typeof activeReply.sender !== "string"
+                                            ? activeReply.sender.username
+                                            : "someone"}
+                                    </span>
+                                    {activeReply.content.length > 0 && (
+                                        <>: <span className="opacity-75">{activeReply.content.length > 48 ? activeReply.content.slice(0, 48) + "…" : activeReply.content}</span></>
+                                    )}
+                                </span>
+                            )}
                             {editingMessage && <span>Editing: <span className="font-semibold">{editingMessage.content}</span></span>}
                             <button
                                 type="button"
                                 className="ml-2 text-xs text-blue-400 hover:underline"
                                 onClick={() => {
-                                    clearEditingMessage()
-                                    setMsgText("")
+                                    if (activeReply && sel) {
+                                        clearReplyTo(String(sel));
+                                    } else {
+                                        clearEditingMessage();
+                                        setMsgText("");
+                                    }
                                 }}
                             >
                                 Cancel
