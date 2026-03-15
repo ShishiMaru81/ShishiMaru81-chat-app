@@ -16,7 +16,10 @@ interface ChatStore {
     setSelectedConversation: (conversation: ClientConversation | null) => void;
     setConversations: (convs: ClientConversation[]) => void;
     setHasMore: (conversationId: string, val: boolean) => void;
+    setCurrentUserId: (userId: string | null) => void;
     setOnlineUsers: (users: string[]) => void;
+    addOnlineUser: (userId: string) => void;
+    removeOnlineUser: (userId: string) => void;
 
     // messages
     setMessages: (
@@ -35,6 +38,8 @@ interface ChatStore {
     updateMessage: (updatedMessage: UIMessage) => void;
     removeMessage: (conversationId: string, messageId: string) => void;
     updateMessageReactions: (conversationId: string, updated: UIMessage) => void;
+    markMessageDelivered: (conversationId: string, messageId: string, userId: string) => void;
+    markMessagesSeen: (conversationId: string, messageIds: string[], userId: string) => void;
     clearTempMessages: (conversationId: string) => void;
     updateEditedMessage: (conversationId: string, messageId: string, newText: string) => void;
     updateDeletedMessage: (message: UIMessage) => void;
@@ -69,6 +74,11 @@ const idOf = (
 
 const isTempId = (id: string) => id.startsWith("temp_");
 
+const senderIdOf = (message: UIMessage): string =>
+    typeof message.sender === "string"
+        ? message.sender
+        : String(message.sender?._id ?? "");
+
 const useChatStore = create<ChatStore>((set) => ({
     selectedConversationId: null,
     selectedConversation: null,
@@ -80,12 +90,32 @@ const useChatStore = create<ChatStore>((set) => ({
     currentUserId: null,
 
     setSelectedConversation: (conv) =>
-        set({
-            selectedConversationId: conv?._id ? String(conv._id) : null,
-            selectedConversation: conv,
+        set((state) => {
+            const selectedConversationId = conv?._id ? String(conv._id) : null;
+
+            if (!selectedConversationId) {
+                return {
+                    selectedConversationId: null,
+                    selectedConversation: null,
+                };
+            }
+
+            return {
+                selectedConversationId,
+                selectedConversation: conv,
+                conversations: state.conversations.map((conversation) =>
+                    String(conversation._id) === selectedConversationId
+                        ? {
+                            ...conversation,
+                            unreadCount: 0,
+                        }
+                        : conversation
+                ),
+            };
         }),
 
     setConversations: (convs) => set({ conversations: convs }),
+    setCurrentUserId: (userId) => set({ currentUserId: userId }),
     setHasMore: (conversationId, val) =>
         set((state) => ({
             hasMoreByConversation: {
@@ -94,6 +124,15 @@ const useChatStore = create<ChatStore>((set) => ({
             },
         })),
     setOnlineUsers: (users) => set({ onlineUsers: users }),
+    addOnlineUser: (userId) =>
+        set((state) => {
+            if (state.onlineUsers.includes(userId)) return {};
+            return { onlineUsers: [...state.onlineUsers, userId] };
+        }),
+    removeOnlineUser: (userId) =>
+        set((state) => ({
+            onlineUsers: state.onlineUsers.filter((id) => id !== userId),
+        })),
 
     setMessages: (conversationId, msgs, appendToTop = false) =>
         set((state) => {
@@ -279,6 +318,67 @@ const useChatStore = create<ChatStore>((set) => ({
             const mapped = current.map((m) =>
                 idOf(m) === idOf(updated) ? ({ ...m, reactions: updated.reactions } as UIMessage) : m
             );
+            return {
+                messagesByConversation: {
+                    ...state.messagesByConversation,
+                    [conversationId]: mapped,
+                },
+            };
+        }),
+
+    markMessageDelivered: (conversationId, messageId, userId) =>
+        set((state) => {
+            const current = state.messagesByConversation[conversationId] || [];
+            const mapped = current.map((message) => {
+                if (idOf(message) !== messageId) return message;
+
+                const deliveredTo = Array.from(
+                    new Set([...(message.deliveredTo || []), userId])
+                );
+                const isOwnMessage = senderIdOf(message) === state.currentUserId;
+
+                return {
+                    ...message,
+                    deliveredTo,
+                    delivered: true,
+                    status: isOwnMessage && message.status !== "seen" ? "delivered" : message.status,
+                };
+            });
+
+            return {
+                messagesByConversation: {
+                    ...state.messagesByConversation,
+                    [conversationId]: mapped,
+                },
+            };
+        }),
+
+    markMessagesSeen: (conversationId, messageIds, userId) =>
+        set((state) => {
+            if (!Array.isArray(messageIds) || messageIds.length === 0) return {};
+
+            const messageIdSet = new Set(messageIds);
+            const current = state.messagesByConversation[conversationId] || [];
+
+            const mapped = current.map((message) => {
+                if (!messageIdSet.has(idOf(message))) return message;
+
+                const seenBy = Array.from(new Set([...(message.seenBy || []), userId]));
+                const deliveredTo = Array.from(
+                    new Set([...(message.deliveredTo || []), userId])
+                );
+                const isOwnMessage = senderIdOf(message) === state.currentUserId;
+
+                return {
+                    ...message,
+                    seenBy,
+                    deliveredTo,
+                    delivered: true,
+                    seen: true,
+                    status: isOwnMessage ? "seen" : message.status,
+                };
+            });
+
             return {
                 messagesByConversation: {
                     ...state.messagesByConversation,
