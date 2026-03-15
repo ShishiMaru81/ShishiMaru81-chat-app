@@ -3,7 +3,7 @@ import express from "express";
 import http from "http";
 import cors from "cors";
 import { initSocket } from "./socket/index.js";
-import { emitToConversation } from "./socket/emit.js";
+import { emitToConversation, emitToUser } from "./socket/emit.js";
 import { SocketEvents } from "../shared/types/SocketEvents.js";
 
 
@@ -36,6 +36,40 @@ app.post("/internal/message-reaction", (req, res) => {
     emitToConversation(conversationId, "message:reaction", payload);
 
     res.json({ success: true });
+});
+
+app.post("/internal/message-delivered", (req, res) => {
+    const { messageId, conversationId, userId, deliveredAt, senderId } = req.body || {};
+
+    if (!messageId || !conversationId || !userId || !senderId) {
+        return res.status(400).json({ error: "Invalid payload" });
+    }
+
+    emitToUser(senderId, SocketEvents.MESSAGE_DELIVERED_UPDATE, {
+        messageId,
+        conversationId,
+        userId,
+        deliveredAt: deliveredAt || new Date().toISOString(),
+    });
+
+    return res.json({ success: true });
+});
+
+app.post("/internal/message-seen", (req, res) => {
+    const { conversationId, messageIds, userId, seenAt } = req.body || {};
+
+    if (!conversationId || !Array.isArray(messageIds) || messageIds.length === 0 || !userId) {
+        return res.status(400).json({ error: "Invalid payload" });
+    }
+
+    emitToConversation(conversationId, SocketEvents.MESSAGE_SEEN_UPDATE, {
+        conversationId,
+        messageIds,
+        userId,
+        seenAt: seenAt || new Date().toISOString(),
+    });
+
+    return res.json({ success: true });
 });
 
 server.listen(3001, () => {
