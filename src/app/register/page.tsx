@@ -6,9 +6,18 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardFooter,
+    CardHeader,
+    CardTitle,
+} from "@/components/ui/card";
 import { Loader2, RefreshCcw } from "lucide-react";
-import toast from "react-hot-toast";
+import { Label } from "@/components/ui/label";
+import ThemeSwitch from "@/components/home/theme-switch";
+import { toast } from "sonner";
 
 export default function RegisterPage() {
     const [step, setStep] = useState<"register" | "verify">("register");
@@ -33,149 +42,277 @@ export default function RegisterPage() {
 
     async function sendOtp() {
         setLoading(true);
-        const res = await fetch("/api/auth/sendOtp", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email }),
-        });
+        try {
+            const res = await fetch("/api/auth/sendOtp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: email.trim() }),
+            });
 
-        if (res.ok) {
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                throw new Error(data?.error || "Failed to send OTP");
+            }
+
             setStep("verify");
             setTimer(60);
             toast.success("OTP sent to your email");
-        } else {
-            toast.error("Failed to send OTP");
+        } catch (error) {
+            if (error instanceof Error) {
+                toast.error(error.message);
+            } else {
+                toast.error("Failed to send OTP");
+            }
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     }
 
-    async function handleRegister() {
-        if (!name || !email || !password) return;
+    async function handleRegister(e: React.FormEvent<HTMLFormElement>) {
+        e.preventDefault();
+
+        if (!name.trim() || !email.trim() || !password.trim()) {
+            toast.error("Please fill all fields");
+            return;
+        }
+
+        if (password.trim().length < 6) {
+            toast.error("Password must be at least 6 characters");
+            return;
+        }
+
         await sendOtp();
     }
 
-    async function handleVerify() {
-        setLoading(true);
-        const res = await fetch("/api/auth/verify-otp", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, otp, name, password }),
-        });
+    async function handleVerify(e: React.FormEvent<HTMLFormElement>) {
+        e.preventDefault();
 
-        if (res.ok) {
+        if (otp.trim().length < 6) {
+            toast.error("Enter the 6-digit OTP");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const res = await fetch("/api/auth/verify-otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    email: email.trim(),
+                    otp: otp.trim(),
+                    name: name.trim(),
+                    password,
+                }),
+            });
+
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                throw new Error(data?.error || "Invalid or expired OTP");
+            }
+
             const result = await signIn("credentials", {
-                email,
+                email: email.trim(),
                 password,
                 redirect: false,
             });
 
-            if (result?.ok) {
-                toast.success("Welcome 🎉");
-                router.push("/");
+            if (result?.error) {
+                throw new Error(result.error);
             }
-        } else {
-            const data = await res.json();
-            toast.error(data.error || "Invalid or expired OTP");
+
+            toast.success("Account created successfully");
+            router.push("/");
+        } catch (error) {
+            if (error instanceof Error) {
+                toast.error(error.message);
+            } else {
+                toast.error("Something went wrong");
+            }
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-[hsl(var(--background))]">
-            <Card className="w-full max-w-md shadow-lg rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
-                <CardHeader>
-                    <CardTitle className="text-center text-2xl font-semibold text-[hsl(var(--foreground))]">
-                        {step === "register" ? "Create your account" : "Verify your email 📩"}
-                    </CardTitle>
-                </CardHeader>
+        <div className="relative min-h-screen overflow-hidden bg-[hsl(var(--background))] px-4 py-8 sm:px-6">
+            <div className="pointer-events-none absolute inset-0">
+                <div className="absolute right-0 top-12 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
+                <div className="absolute -bottom-20 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-blue-500/10 blur-3xl" />
+            </div>
 
-                <CardContent>
-                    <AnimatePresence mode="wait">
-                        {step === "register" ? (
-                            <motion.div
-                                key="register"
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -20 }}
-                                transition={{ duration: 0.25 }}
-                                className="space-y-4"
-                            >
-                                <Input
-                                    placeholder="Full Name"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    className="border-[hsl(var(--input))] focus:ring-[hsl(var(--ring))]"
-                                />
-                                <Input
-                                    type="email"
-                                    placeholder="Email"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    className="border-[hsl(var(--input))] focus:ring-[hsl(var(--ring))]"
-                                />
-                                <Input
-                                    type="password"
-                                    placeholder="Password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="border-[hsl(var(--input))] focus:ring-[hsl(var(--ring))]"
-                                />
+            <div className="relative mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md items-center">
+                <Card className="w-full border-[hsl(var(--border))]/70 bg-[hsl(var(--card))/0.94] shadow-2xl shadow-black/25 backdrop-blur-sm">
+                    <CardHeader className="gap-5">
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))/0.45] px-3 py-1.5 text-sm text-[hsl(var(--muted-foreground))]">
+                                Already have an account?
                                 <Button
-                                    className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90"
-                                    onClick={handleRegister}
-                                    disabled={loading || !email || !password || !name}
+                                    variant="link"
+                                    className="h-auto px-2 py-0 text-sm font-medium"
+                                    onClick={() => router.push("/login")}
                                 >
-                                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Create Account
+                                    Login
                                 </Button>
-                            </motion.div>
-                        ) : (
-                            <motion.div
-                                key="verify"
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -20 }}
-                                transition={{ duration: 0.25 }}
-                                className="space-y-4 text-center"
-                            >
-                                <p className="text-[hsl(var(--muted-foreground))] text-sm">
-                                    We’ve sent a 6-digit code to <strong>{email}</strong>
-                                </p>
-                                <Input
-                                    maxLength={6}
-                                    placeholder="Enter OTP"
-                                    className="tracking-widest text-center text-lg border-[hsl(var(--input))] focus:ring-[hsl(var(--ring))]"
-                                    value={otp}
-                                    onChange={(e) => setOtp(e.target.value)}
-                                />
-                                <Button
-                                    className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90"
-                                    onClick={handleVerify}
-                                    disabled={loading || otp.length < 6}
-                                >
-                                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Verify & Login
-                                </Button>
+                            </div>
+                            <ThemeSwitch />
+                        </div>
 
-                                <div className="pt-2 flex justify-center items-center gap-2">
-                                    {timer > 0 ? (
-                                        <span className="text-sm text-[hsl(var(--muted-foreground))]">
-                                            Resend OTP in {timer}s
-                                        </span>
-                                    ) : (
-                                        <button
-                                            onClick={sendOtp}
-                                            className="flex items-center text-sm text-[hsl(var(--primary))] hover:underline"
+                        <div className="space-y-2">
+                            <CardTitle className="max-w-sm text-3xl font-semibold leading-[1.05] tracking-tight sm:text-4xl">
+                                {step === "register" ? "Create your account" : "Verify your email"}
+                            </CardTitle>
+                            <CardDescription className="max-w-md text-sm leading-6 sm:text-base">
+                                {step === "register"
+                                    ? "Set up your account to start chatting instantly."
+                                    : "Enter the one-time code we sent to your email."}
+                            </CardDescription>
+                        </div>
+                    </CardHeader>
+
+                    <CardContent>
+                        <AnimatePresence mode="wait">
+                            {step === "register" ? (
+                                <motion.form
+                                    key="register"
+                                    initial={{ opacity: 0, y: 12 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -12 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="space-y-4"
+                                    onSubmit={handleRegister}
+                                >
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="name">Full Name</Label>
+                                        <Input
+                                            id="name"
+                                            placeholder="John Doe"
+                                            value={name}
+                                            onChange={(e) => setName(e.target.value)}
+                                            className="h-11"
+                                            autoComplete="name"
+                                            disabled={loading}
+                                            required
+                                        />
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="register-email">Email</Label>
+                                        <Input
+                                            id="register-email"
+                                            type="email"
+                                            placeholder="you@example.com"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            className="h-11"
+                                            autoComplete="email"
+                                            disabled={loading}
+                                            required
+                                        />
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="register-password">Password</Label>
+                                        <Input
+                                            id="register-password"
+                                            type="password"
+                                            placeholder="At least 6 characters"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            className="h-11"
+                                            autoComplete="new-password"
+                                            disabled={loading}
+                                            required
+                                        />
+                                    </div>
+
+                                    <Button
+                                        type="submit"
+                                        className="h-11 w-full"
+                                        disabled={loading || !email.trim() || !password.trim() || !name.trim()}
+                                    >
+                                        {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                        Send OTP
+                                    </Button>
+                                </motion.form>
+                            ) : (
+                                <motion.form
+                                    key="verify"
+                                    initial={{ opacity: 0, y: 12 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -12 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="space-y-4"
+                                    onSubmit={handleVerify}
+                                >
+                                    <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))/0.45] px-3 py-2 text-sm text-[hsl(var(--muted-foreground))]">
+                                        Code sent to <span className="font-medium text-[hsl(var(--foreground))]">{email}</span>
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="otp">One-Time Password</Label>
+                                        <Input
+                                            id="otp"
+                                            maxLength={6}
+                                            placeholder="000000"
+                                            className="h-11 text-center text-lg tracking-[0.35em]"
+                                            value={otp}
+                                            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                                            inputMode="numeric"
+                                            autoComplete="one-time-code"
+                                            disabled={loading}
+                                            required
+                                        />
+                                    </div>
+
+                                    <Button
+                                        type="submit"
+                                        className="h-11 w-full"
+                                        disabled={loading || otp.trim().length < 6}
+                                    >
+                                        {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                        Verify & Login
+                                    </Button>
+
+                                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-sm">
+                                        <Button
+                                            type="button"
+                                            variant="link"
+                                            className="h-auto px-0"
+                                            onClick={() => {
+                                                setStep("register");
+                                                setOtp("");
+                                            }}
                                         >
-                                            <RefreshCcw className="mr-1 h-4 w-4" /> Resend OTP
-                                        </button>
-                                    )}
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </CardContent>
-            </Card>
+                                            Edit details
+                                        </Button>
+
+                                        {timer > 0 ? (
+                                            <span className="text-[hsl(var(--muted-foreground))]">
+                                                Resend OTP in {timer}s
+                                            </span>
+                                        ) : (
+                                            <Button
+                                                type="button"
+                                                variant="link"
+                                                className="h-auto px-0"
+                                                onClick={sendOtp}
+                                                disabled={loading}
+                                            >
+                                                <RefreshCcw className="mr-1 h-4 w-4" />
+                                                Resend OTP
+                                            </Button>
+                                        )}
+                                    </div>
+                                </motion.form>
+                            )}
+                        </AnimatePresence>
+                    </CardContent>
+
+                    <CardFooter className="text-xs leading-6 text-[hsl(var(--muted-foreground))]">
+                        We protect your account with email verification before first login.
+                    </CardFooter>
+                </Card>
+            </div>
         </div>
     );
 }
