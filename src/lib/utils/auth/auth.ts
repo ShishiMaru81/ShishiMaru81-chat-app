@@ -5,14 +5,11 @@ import AppleProvider from "next-auth/providers/apple";
 import bcrypt from "bcryptjs";
 import { connectToDatabase } from "../../Db/db";
 import { User } from "@/models/User";
-import { MongoDBAdapter } from "@next-auth/mongodb-adapter";
-import clientPromise from "../../Db/mongo";
 import { loginRateLimiter } from "../rateLimiter";
 import { headers } from "next/headers";
 
 
 export const authOptions: NextAuthOptions = {
-    adapter: MongoDBAdapter(clientPromise),
     providers: [
         CredentialsProvider({
             name: "Credentials",
@@ -80,16 +77,22 @@ export const authOptions: NextAuthOptions = {
                 let dbUser = await User.findOne({ email: profile?.email });
 
                 if (!dbUser) {
-                    dbUser = await User.create({
-                        email: user.email,
-                        username: user.name,
-                        profilePicture: user.image,
-                        role: "user", //  default role for new Google users
-                    });
+                    try {
+                        dbUser = await User.create({
+                            email: user.email,
+                            username: user.name,
+                            profilePicture: user.image,
+                            role: "user",
+                        });
+                    } catch {
+                        // Possible race condition — another process created the user
+                        dbUser = await User.findOne({ email: profile?.email });
+                        if (!dbUser) return false;
+                    }
                 }
 
                 user.id = dbUser._id.toString();
-                user.role = dbUser.role; //  ensure we attach DB role
+                user.role = (dbUser.role as string) ?? "user";
             }
 
             if (account?.provider === "apple") {
