@@ -140,6 +140,7 @@ export interface MessageReactionPayload {
 export interface TypingPayload {
     conversationId: string;
     userId: string;
+    conversationMembers?: string[];
     name?: string;
     avatar?: string;
 }

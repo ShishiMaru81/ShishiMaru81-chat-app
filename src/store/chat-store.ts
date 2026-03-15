@@ -55,6 +55,7 @@ interface ChatStore {
 
     // typing
     setTyping: (conversationId: string, userId: string, isTyping: boolean) => void;
+    clearTypingConversation: (conversationId: string) => void;
     editingMessage: UIMessage | null;
     setEditingMessage: (msg: ChatStore['editingMessage']) => void;
     clearEditingMessage: () => void;
@@ -430,6 +431,17 @@ const useChatStore = create<ChatStore>((set) => ({
                     ...state.typingByConversation,
                     [conversationId]: Array.from(setUsers),
                 },
+            };
+        }),
+    clearTypingConversation: (conversationId) =>
+        set((state) => {
+            if (!state.typingByConversation[conversationId]) return {};
+
+            const next = { ...state.typingByConversation };
+            delete next[conversationId];
+
+            return {
+                typingByConversation: next,
             };
         }),
     editingMessage: null,
