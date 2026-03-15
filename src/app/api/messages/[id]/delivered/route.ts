@@ -1,28 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 import Message from "@/models/Message";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/utils/auth/auth";
-import { connectToDatabase } from "@/lib/Db/db";
+import { getAuthUser } from "@/lib/utils/auth/getAuthUser";
+import { markMessageDelivered } from "@/lib/services/message-receipt.service";
+import { getInternalSocketServerUrl } from "@/lib/socket/socketConfig";
 
 export async function PATCH(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session?.user?.id) {
+        const user = await getAuthUser();
+        if (!user?.id) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const { id } = await params;
-        const { at } = await req.json();
-        await connectToDatabase();
-        const message = await Message.findById(id);
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return NextResponse.json({ error: "Invalid message ID" }, { status: 400 });
+        }
+
+        const { at } = (await req.json().catch(() => ({}))) as { at?: string | Date };
+
+        const message = await Message.findById(id).select("sender conversationId");
         if (!message) {
             return NextResponse.json({ error: "Message not found" }, { status: 404 });
         }
 
-        const userId = session.user.id;
+        const userId = user.id;
 
         // ❌ sender should NOT mark delivered
         if (message.sender.toString() === userId) {
@@ -32,22 +37,20 @@ export async function PATCH(
             );
         }
 
-        // ✅ idempotent check
-        const alreadyDelivered =
-            Array.isArray(message.deliveredTo) &&
-            message.deliveredTo.some(
-                (d: { userId: string; at: Date }) => d.userId === userId
-            );
-        if (!alreadyDelivered) {
-            if (!Array.isArray(message.deliveredTo)) {
-                message.deliveredTo = [];
-            }
-            message.deliveredTo.push({
+        const deliveredAt = at ? new Date(at) : new Date();
+        await markMessageDelivered({ messageId: id, userId, at: deliveredAt });
+
+        await fetch(`${getInternalSocketServerUrl()}/internal/message-delivered`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                messageId: id,
+                conversationId: message.conversationId.toString(),
                 userId,
-                at: at ? new Date(at) : new Date(),
-            });
-            await message.save();
-        }
+                deliveredAt,
+                senderId: message.sender.toString(),
+            }),
+        });
 
         return NextResponse.json({ success: true });
     } catch (error) {
