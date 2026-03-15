@@ -6,6 +6,8 @@ import { DeleteHandler } from "./handlers/message/delete.handler.js";
 import { adminHandler } from "./handlers/admin/admin.js";
 import { presenceHandler } from "./handlers/presence/presence.handler.js";
 import { registerMessageHandlers } from "./handlers/message/message.handler.js";
+import { deliveredHandler } from "./handlers/delivery/delivered.handler.js";
+import { SeenHandler } from "./handlers/delivery/seen.handler.js";
 
 import { typingHandler } from "./handlers/typing/typing.handler.js";
 import type { Socket } from "socket.io";
@@ -24,8 +26,10 @@ export async function initSocket(server: HTTPServer) {
         socket.join(`user:${userId}`);
         console.log("🔌 socket connected:", socket.id);
         adminHandler(io, socket, redis);
-        presenceHandler(io, socket);
-        registerMessageHandlers(io, socket);
+        presenceHandler(io, socket, redis.appClient);
+        registerMessageHandlers(io, socket, redis.appClient);
+        deliveredHandler(io, socket, redis.appClient);
+        SeenHandler(io, socket, redis.appClient);
         typingHandler(io, socket);
         messageEditHandler(io, socket);
         DeleteHandler(io, socket);
