@@ -29,7 +29,7 @@ const Conversation = ({ conversation }: ConversationProps) => {
     const { user } = useUser();
     const currentUserEmail = session?.user?.email;
 
-    const { setSelectedConversation, selectedConversationId } = useChatStore();
+    const { setSelectedConversation, selectedConversationId, onlineUsers } = useChatStore();
 
     const otherUser = conversation.participants.find(
         (p): p is ClientUser => isUser(p) && p.email !== currentUserEmail
@@ -46,6 +46,11 @@ const Conversation = ({ conversation }: ConversationProps) => {
     const lastMessageType = lastMessage?.messageType;
 
     const isActive = selectedConversationId === String(conversation._id);
+    const isDirectOnline = Boolean(
+        !conversation.isGroup &&
+        otherUser?._id &&
+        onlineUsers.includes(String(otherUser._id))
+    );
 
     return (
         <div
@@ -56,7 +61,7 @@ const Conversation = ({ conversation }: ConversationProps) => {
         >
             {/* Avatar */}
             <Avatar className="relative w-11 h-11 border border-[hsl(var(--border))]">
-                {conversation.isOnline && (
+                {isDirectOnline && (
                     <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-black" />
                 )}
 

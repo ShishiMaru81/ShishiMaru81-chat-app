@@ -26,7 +26,7 @@ const Conversation = ({ conversation }: ConversationProps) => {
     const { user } = useUser();
     const currentUserEmail = session?.user?.email;
 
-    const { setSelectedConversation, selectedConversationId } = useChatStore();
+    const { setSelectedConversation, selectedConversationId, onlineUsers } = useChatStore();
 
     const otherUser = conversation.participants.find(
         (p): p is ClientUser =>
@@ -45,6 +45,11 @@ const Conversation = ({ conversation }: ConversationProps) => {
 
     const isActive =
         selectedConversationId === String(conversation._id);
+    const isDirectOnline = Boolean(
+        !conversation.isGroup &&
+        otherUser?._id &&
+        onlineUsers.includes(String(otherUser._id))
+    );
 
     return (
         <>
@@ -55,9 +60,9 @@ const Conversation = ({ conversation }: ConversationProps) => {
                 onClick={() => setSelectedConversation(conversation)}
             >
                 <Avatar className="border border-gray-900 overflow-visible relative">
-                    {/* {conversation.isOnline && (
+                    {isDirectOnline && (
                         <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-foreground" />
-                    )} */}
+                    )}
                     <AvatarImage
                         src={getAvatarUrl(conversationImage, 128)}
                         className="object-cover rounded-full"

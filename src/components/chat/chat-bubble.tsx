@@ -93,6 +93,28 @@ const ChatBubble = ({
 
     const hasReactions = Object.keys(groupedReactions).length > 0;
 
+    const receiptState = (() => {
+        if (!isMine) return null;
+
+        if (message.status === "pending" || message.status === "queued") {
+            return "sending" as const;
+        }
+
+        if (message.status === "seen" || message.seen || (message.seenBy?.length ?? 0) > 0) {
+            return "seen" as const;
+        }
+
+        if (
+            message.status === "delivered" ||
+            message.delivered ||
+            (message.deliveredTo?.length ?? 0) > 0
+        ) {
+            return "delivered" as const;
+        }
+
+        return "sent" as const;
+    })();
+
     const getRepliedPreview = () => {
         const replied = (message).repliedTo;
 
@@ -346,8 +368,16 @@ const ChatBubble = ({
                             minute: "2-digit",
                         })}
                     </span>
-                    {/* Read receipts (placeholder, replace with real logic) */}
-                    {isMine && message.seenBy && message.seenBy.length > 0 && (
+                    {receiptState === "sending" && (
+                        <span className="ml-1 text-gray-400 text-xs">...</span>
+                    )}
+                    {receiptState === "sent" && (
+                        <span className="ml-1 text-gray-400 text-xs">✓</span>
+                    )}
+                    {receiptState === "delivered" && (
+                        <span className="ml-1 text-gray-400 text-xs">✓✓</span>
+                    )}
+                    {receiptState === "seen" && (
                         <span className="ml-1 text-blue-400 text-xs">✓✓</span>
                     )}
                 </div>

@@ -145,8 +145,8 @@ const MessageInput = () => {
         if (!isOnline || socket.disconnected) {
             await addToQueue({
                 tempId,
-                id: Number(tempId),
                 conversationId: String(sel),
+                conversationMembers,
                 senderId: String(me._id), // ✅ required
                 content: tempMessage.content,
                 messageType: tempMessage.messageType,

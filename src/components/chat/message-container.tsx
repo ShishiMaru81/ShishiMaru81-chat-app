@@ -7,10 +7,11 @@ import ChatBubble from "./chat-bubble";
 import ChatDaySeparator from "../home/ChatDaySeparator";
 import { useUser } from "@/context/UserContext";
 import { deleteMessage, reactToMessage } from "@/lib/utils/api";
-import useSocketStore from "@/store/useSocketStore";
 import { MessageEditPayload } from "@/shared/types/SocketEvents";
 import { UIMessage } from "@/shared/types/ui-message";
 import { AnimatePresence, motion } from "framer-motion";
+import { useConversationPresence } from "@/lib/hooks/useConversationPresence";
+import { useMessageDelivery } from "@/lib/hooks/useMessageDelivery";
 
 interface MessageContainerProps {
     conversationId: string;
@@ -19,13 +20,16 @@ interface MessageContainerProps {
 const MessageContainer = ({ conversationId }: MessageContainerProps) => {
     const sel = useChatStore(s => s.selectedConversationId);
     let lastDate: string | null = null;
-    const { messagesByConversation, addMessage, setMessages, setHasMore, updateEditedMessage, updateLastMessage, setReplyTo } = useChatStore();
+    const { messagesByConversation, setMessages, setHasMore, updateEditedMessage, setReplyTo } = useChatStore();
     const topRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const { user } = useUser();
     const [typingUsers, setTypingUsers] = useState<string[]>([]);
-    const { joinConversation, leaveConversation } = useSocketStore();
+    const currentUserId = user?._id ?? null;
     const [newMessages, setNewMessages] = useState(false);
+
+    useConversationPresence(conversationId);
+    useMessageDelivery({ conversationId, currentUserId });
 
     const fetchMessages = useCallback(async (cursor?: string) => {
         if (!sel) return;
@@ -58,13 +62,6 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
         fetchMessages();
     }, [sel, fetchMessages]);
 
-    useEffect(() => {
-        joinConversation(conversationId);
-
-        return () => {
-            leaveConversation(conversationId);
-        };
-    }, [conversationId, joinConversation, leaveConversation]);
     const handleReact = async (message: UIMessage, emoji: string) => {
         await reactToMessage(message, emoji);
     };
@@ -94,12 +91,11 @@ const MessageContainer = ({ conversationId }: MessageContainerProps) => {
         socket.on("typing:stop", handleStopTyping);
 
         return () => {
-            socket.emit("conversation:leave", { conversationId: String(sel) });
             socket.off("message:edited", handleEditMessage);
             socket.off("typing:start", handleTyping);
             socket.off("typing:stop", handleStopTyping);
         };
-    }, [user?._id, updateLastMessage, updateEditedMessage, sel, addMessage, conversationId]);
+    }, [updateEditedMessage, sel]);
 
     const scrollToBottom = () => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
