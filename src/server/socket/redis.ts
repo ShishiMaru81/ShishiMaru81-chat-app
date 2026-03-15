@@ -1,27 +1,32 @@
-import { createClient, RedisClientType } from "redis";
+import { Redis } from "ioredis";
 
 export interface RedisAdapterClients {
-    pubClient: RedisClientType;
-    subClient: RedisClientType;
+    pubClient: Redis;
+    subClient: Redis;
+    appClient: Redis;
 }
 
 export async function initRedis(): Promise<RedisAdapterClients> {
-    const pubClient: RedisClientType = createClient({
-        url: process.env.REDIS_URL,
-    });
+    const redisUrl = process.env.REDIS_URL;
+    if (!redisUrl) {
+        throw new Error("REDIS_URL is required to initialize socket Redis clients");
+    }
 
-    const subClient: RedisClientType = pubClient.duplicate();
+    const pubClient = new Redis(redisUrl, { lazyConnect: true });
+    const subClient = new Redis(redisUrl, { lazyConnect: true });
+    const appClient = new Redis(redisUrl, { lazyConnect: true });
 
-    pubClient.on("error", (err) =>
-        console.error("❌ Redis Pub Error:", err)
-    );
-    subClient.on("error", (err) =>
-        console.error("❌ Redis Sub Error:", err)
-    );
+    pubClient.on("error", (err: unknown) => console.error("❌ Redis Pub Error:", err));
+    subClient.on("error", (err: unknown) => console.error("❌ Redis Sub Error:", err));
+    appClient.on("error", (err: unknown) => console.error("❌ Redis App Error:", err));
 
-    await Promise.all([pubClient.connect(), subClient.connect()]);
+    await Promise.all([
+        pubClient.connect(),
+        subClient.connect(),
+        appClient.connect(),
+    ]);
 
     console.log("✅ Redis clients connected");
 
-    return { pubClient, subClient };
+    return { pubClient, subClient, appClient };
 }
