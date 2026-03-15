@@ -13,26 +13,25 @@ import { Button } from "../../ui/button";
 import { ImageIcon, MessageSquareDiff } from "lucide-react";
 import Image from "next/image";
 import toast from "react-hot-toast";
-import { useConversationStore } from "@/store/chat-store";
-import { getMe, getUsers, createConversation } from "@/lib/api";
-
+import useChatStore from "@/store/chat-store";
+import { getMe, getUsers, createConversation } from "@/lib/utils/api";
 import { useEffect, useRef, useState } from "react";
 import { UserItem } from "./UserItem";
-import { IConversation } from "@/models/Conversation";
 import { upload } from "@imagekit/next";
-import { IUser } from "@/models/User";
+import { ClientUser } from "@/shared/types/user";
+import { ClientConversation } from "@/shared/types/client-conversation";
 
 const UserListDialog = () => {
     const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
     const [groupName, setGroupName] = useState("");
     const [selectedImage, setSelectedImage] = useState<File | null>(null);
     const [renderedImage, setRenderedImage] = useState("");
-    const [users, setUsers] = useState<IUser[]>([]);
-    const [me, setMe] = useState<IUser>();
+    const [users, setUsers] = useState<ClientUser[]>([]);
+    const [me, setMe] = useState<ClientUser>();
     const [isLoading, setIsLoading] = useState(false);
 
     const dialogCloseRef = useRef<HTMLButtonElement>(null);
-    const { setSelectedConversation } = useConversationStore();
+    const { setSelectedConversation } = useChatStore();
 
     // 🔁 Load users
     useEffect(() => {
@@ -40,7 +39,7 @@ const UserListDialog = () => {
             try {
                 const [meData, allUsers] = await Promise.all([getMe(), getUsers()]);
                 setMe(meData);
-                setUsers(allUsers.filter((u: IUser) => u._id !== meData._id));
+                setUsers(allUsers.filter((u: ClientUser) => u._id !== meData._id));
             } catch {
                 toast.error("Failed to load users");
             }
@@ -100,12 +99,12 @@ const UserListDialog = () => {
 
             const matchedUsers = selectedUsers
                 .map((id) => users.find((u) => String(u._id) === String(id)))
-                .filter(Boolean) as IUser[];
+                .filter(Boolean) as ClientUser[];
 
             const otherUser = matchedUsers[0];
             const conversationName = isGroup ? groupName : (otherUser?.username || otherUser?.email || "");
 
-            const newConversation = {
+            const newConversation: ClientConversation = {
                 _id: conversationId,
                 participants: matchedUsers,
                 isGroup,
@@ -113,15 +112,14 @@ const UserListDialog = () => {
                 name: conversationName,
                 admin: String(me._id),
                 type: isGroup ? "group" : "direct",
-                _creationTime: new Date(),
-                createdAt: new Date(),
-                updatedAt: new Date(),
+                createdAt: String(new Date()),
+                updatedAt: String(new Date()),
                 lastMessage: undefined,
-                isOnline: false,
             };
 
+
             // Fix: Ensure newConversation is of type IConversation
-            setSelectedConversation(newConversation as IConversation);
+            setSelectedConversation(newConversation);
             dialogCloseRef.current?.click();
 
             setSelectedUsers([]);

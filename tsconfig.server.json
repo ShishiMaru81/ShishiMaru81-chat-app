@@ -1,16 +1,17 @@
 {
     "compilerOptions": {
-        "target": "ES2020",
-        "module": "ESNext",
-        "moduleResolution": "node",
+        "target": "ES2022",
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
         "outDir": "dist",
-        "esModuleInterop": true,
-        "allowSyntheticDefaultImports": true,
+        "rootDir": "src",
         "strict": true,
+        "esModuleInterop": true,
         "skipLibCheck": true,
-        "resolveJsonModule": true
+        "isolatedModules": true,
     },
     "include": [
-        "socket.ts"
+        "src/server/**/*",
+        "src/shared/**/*"
     ]
 }

@@ -1,4 +1,4 @@
-import mongoose, { Schema, model, models, Document, Types } from "mongoose";
+import mongoose, { Schema, model, Document, Types } from "mongoose";
 
 
 export interface IUser extends Document {
@@ -15,8 +15,6 @@ export interface IUser extends Document {
     twoFactorEnabled: boolean;
     twoFactorSecret: string;
     conversations: Types.ObjectId[];
-    createdAt: Date;
-    updatedAt: Date;
 }
 
 const userSchema = new Schema<IUser>({
@@ -32,8 +30,8 @@ const userSchema = new Schema<IUser>({
     twoFactorEnabled: { type: Boolean, default: false },
     twoFactorSecret: { type: String },
     conversations: [{ type: Schema.Types.ObjectId, ref: 'Conversation' }],
-    createdAt: { type: Date, default: Date.now },
-    updatedAt: { type: Date, default: Date.now }
-});
+},
+    { timestamps: true },
+);
 
-export const User = models.User || model<IUser>("User", userSchema);
+export const User = mongoose.models.User || model<IUser>("User", userSchema);

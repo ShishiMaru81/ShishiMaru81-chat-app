@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { handleCreateMessage } from "@/lib/controllers/message.controller";
-import { CreateMessageSchema } from "@/lib/validators/ message.schema";
+import { handleCreateMessage } from "@/lib/socket/controllers/message.controller";
+import { CreateMessageSchema } from "@/lib/validators/message.schema";
 import { getPaginatedMessages } from "@/lib/repositories/message.repo";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { messageRateLimiter } from "@/lib/rateLimiter";
+import { authOptions } from "@/lib/utils/auth/auth";
+import { normalizeMessage } from "@/server/normalizers/message.normalizer";
+
+//import { messageRateLimiter } from "@/lib/utils/rateLimiter";
 
 export async function POST(req: NextRequest) {
     try {
@@ -12,14 +14,16 @@ export async function POST(req: NextRequest) {
         if (!session) {
             return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
         }
-        const identifier = session.user.email;
-        const { success } = await messageRateLimiter.limit(identifier);
-        if (!success) return NextResponse.json({ error: "Too many messages" }, { status: 429 });
-        const parsed = CreateMessageSchema.parse(await req.json());
+        const senderId = session.user.id;
+        // const identifier = session.user.email;
+        //const { success } = await messageRateLimiter.limit(identifier);
+        //if (!success) return NextResponse.json({ error: "Too many messages" }, { status: 429 });
+        const requestBody = await req.json();
+        const parsed = CreateMessageSchema.parse(requestBody);
+        const message = await handleCreateMessage(parsed, senderId);
+        const clientMessage = normalizeMessage(message);
 
-        const message = await handleCreateMessage(parsed);
-
-        return NextResponse.json(message, { status: 201 });
+        return NextResponse.json(clientMessage, { status: 201 });
     } catch (error) {
         console.error("❌ Message POST error:", error);
 
@@ -37,8 +41,9 @@ export async function GET(req: NextRequest) {
         const cursor = searchParams.get("cursor") || undefined;
 
         const messages = await getPaginatedMessages(conversationId, cursor);
+        const clientMessages = (Array.isArray(messages) ? messages : []).map(normalizeMessage);
         // Always return an array, even if empty:
-        return NextResponse.json(messages, { status: 200 });
+        return NextResponse.json(clientMessages, { status: 200 });
     } catch (err) {
         console.error(err);
         // Return an empty array instead of no body:

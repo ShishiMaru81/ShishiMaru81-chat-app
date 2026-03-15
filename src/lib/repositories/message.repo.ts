@@ -1,7 +1,7 @@
-import Message from "@/models/Message";
+import Message, { IMessagePopulated } from "@/models/Message";
 import { Types } from "mongoose";
 import { IMessage } from "@/models/Message";
-import { connectToDatabase } from "../db";
+import { connectToDatabase } from "../Db/db";
 
 export async function getPaginatedMessages(conversationId: string, cursor?: string, limit = 20) {
     const query: { conversationId: Types.ObjectId; _id?: { $lt: Types.ObjectId } } = { conversationId: new Types.ObjectId(conversationId) };
@@ -14,7 +14,13 @@ export async function getPaginatedMessages(conversationId: string, cursor?: stri
         .sort({ _id: -1 })
         .limit(limit)
         .populate("sender", "username email profilePicture status _id")
-        .lean();
+        .populate("reactions.users", "username email profilePicture status _id")
+        .populate({
+            path: "repliedTo",
+            select: "content sender messageType",
+            populate: { path: "sender", select: "username profilePicture _id" },
+        })
+        .lean<IMessagePopulated[]>();
 
     return messages;
 }

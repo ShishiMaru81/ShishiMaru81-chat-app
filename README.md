@@ -148,7 +148,7 @@ GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
 
 NEXT_PUBLIC_SOCKET_URL=http://localhost:3001
-
+INTERNAL_SECRET=generate_a_long_random_secret_shared_by_next_and_socket_server
 NEXT_PUBLIC_PUBLIC_KEY=your_imagekit_public_key
 IMAGEKIT_PRIVATE_KEY=your_imagekit_private_key
 ```
@@ -169,86 +169,209 @@ npm install
 npm run dev
 ```
 
-### 3️⃣ Start the socket server (if separate)
+4. Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Tech Stack
+
+- **Frontend**: Next.js 15, React, TypeScript, Tailwind CSS
+- **Backend**: Next.js API Routes, Socket.IO
+- **Database**: MongoDB with Mongoose
+- **Authentication**: NextAuth.js
+- **File Storage**: ImageKit
+- **Real-time**: Socket.IO
+
+## Project Structure
 
 ```
-npm run dev:socket
+├── Bin
+│   ├── register
+│   │   └── route.ts
+│   ├── socketHandlers.ts
+│   └── useConversationId.ts
+├── components.json
+├── dist
+│   └── socket.js
+├── docker-compose.yml
+├── Dockerfile
+├── Dockerfile.socket
+├── eslint.config.mjs
+├── next-auth.d.ts
+├── next-env.d.ts
+├── next.config.ts
+├── package-lock.json
+├── package.json
+├── postcss.config.mjs
+├── public
+│   ├── bg-dark.png
+│   ├── bg-light.png
+│   ├── dall-e.png
+│   ├── desktop-hero.png
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── gpt.png
+│   ├── next.svg
+│   ├── placeholder.png
+│   ├── vercel.svg
+│   └── window.svg
+├── README.md
+├── socket.ts
+├── src
+│   ├── app
+│   │   ├── (chat)
+│   │   ├── admin
+│   │   │   ├── page.tsx
+│   │   │   ├── settings
+│   │   │   │   └── page.tsx
+│   │   │   └── users
+│   │   │       └── page.tsx
+│   │   ├── api
+│   │   │   ├── admin
+│   │   │   │   ├── changeRoal
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── dashboard
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── toggleban
+│   │   │   │       └── route.ts
+│   │   │   ├── auth
+│   │   │   │   ├── [...nextauth]
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── imagekit-auth
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── sendOtp
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── verify-otp
+│   │   │   │       └── route.ts
+│   │   │   ├── conversations
+│   │   │   │   ├── [id]
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── me
+│   │   │   │   └── route.ts
+│   │   │   ├── messages
+│   │   │   │   ├── [id]
+│   │   │   │   │   ├── delete
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   ├── edit
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── react
+│   │   │   │   │       └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── testdb
+│   │   │   │   └── route.ts
+│   │   │   ├── updateImage
+│   │   │   │   └── route.ts
+│   │   │   ├── user
+│   │   │   │   └── [email]
+│   │   │   │       └── route.ts
+│   │   │   └── users
+│   │   │       └── route.ts
+│   │   ├── favicon.ico
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   ├── login
+│   │   │   └── page.tsx
+│   │   ├── page.tsx
+│   │   └── register
+│   │       └── page.tsx
+│   ├── components
+│   │   ├── admin
+│   │   │   ├── Charts.tsx
+│   │   │   ├── ConversationTable.tsx
+│   │   │   ├── ReportTable.tsx
+│   │   │   ├── Sidebar.tsx
+│   │   │   ├── SystemStatus.tsx
+│   │   │   ├── TopStats.tsx
+│   │   │   ├── UserActions.tsx
+│   │   │   └── UserTable.tsx
+│   │   ├── chat
+│   │   │   └── reaction-bar.tsx
+│   │   ├── home
+│   │   │   ├── chat-bubble-avatar.tsx
+│   │   │   ├── chat-bubble.tsx
+│   │   │   ├── chat-placeholder.tsx
+│   │   │   ├── ChatBox.tsx
+│   │   │   ├── ChatDaySeparator.tsx
+│   │   │   ├── conversation.tsx
+│   │   │   ├── dialogs
+│   │   │   │   ├── FileUpload.tsx
+│   │   │   │   ├── user-list-dialog.tsx
+│   │   │   │   └── UserItem.tsx
+│   │   │   ├── group-members-dialog.tsx
+│   │   │   ├── ImageDebug.tsx
+│   │   │   ├── ImageUpload.tsx
+│   │   │   ├── left-panel.tsx
+│   │   │   ├── message-container.tsx
+│   │   │   ├── message-input.tsx
+│   │   │   ├── ProfilePictureUpload.tsx
+│   │   │   ├── right-panel.tsx
+│   │   │   ├── theme-switch.tsx
+│   │   │   ├── UserAvatar.tsx
+│   │   │   └── userProfile.tsx
+│   │   └── ui
+│   │       ├── avatar.tsx
+│   │       ├── button.tsx
+│   │       ├── card.tsx
+│   │       ├── dialog.tsx
+│   │       ├── dropdown-menu.tsx
+│   │       ├── input.tsx
+│   │       ├── label.tsx
+│   │       └── sonner.tsx
+│   ├── context
+│   │   └── UserContext.tsx
+│   ├── dummy-data
+│   │   └── db.ts
+│   ├── lib
+│   │   ├── api.ts
+│   │   ├── auth.ts
+│   │   ├── controllers
+│   │   │   └── message.controller.ts
+│   │   ├── Db
+│   │   │   └── offlineMessages.ts
+│   │   ├── db.ts
+│   │   ├── hooks
+│   │   │   ├── useNetworkStatus.ts
+│   │   │   ├── useOfflineMessageSync.ts
+│   │   │   └── useRateLimitHandler.ts
+│   │   ├── mongo.ts
+│   │   ├── rateLimiter.ts
+│   │   ├── repositories
+│   │   │   └── message.repo.ts
+│   │   ├── sendOtp.ts
+│   │   ├── services
+│   │   │   └── message.service.ts
+│   │   ├── socket.ts
+│   │   ├── socketClient.tsx
+│   │   ├── svgs.tsx
+│   │   ├── utils.ts
+│   │   └── validators
+│   │       └──  message.schema.ts
+│   ├── middleware.ts
+│   ├── models
+│   │   ├── Conversation.ts
+│   │   ├── Devices.ts
+│   │   ├── Message.ts
+│   │   ├── OTP.ts
+│   │   ├── TempMessage.ts
+│   │   └── User.ts
+│   ├── pages
+│   │   └── api
+│   │       └── socket.ts
+│   ├── providers
+│   │   └── theme-provider.tsx
+│   ├── store
+│   │   ├── chat-store.ts
+│   │   ├── offline-store.ts
+│   │   └── useSocketStore.ts
+│   └── types
+│       ├── conversation.ts
+│       ├── next-auth.d.ts
+│       └── user.ts
+├── tailwind.config.ts
+├── tsconfig.json
+├── tsconfig.server.json
+├── types.d.ts
+└── utils
+    └── imagekit.ts
 ```
 
-### 4️⃣ Open in browser
-
-```
-http://localhost:3000
-```
-
----
-
-## 🐳 Docker Setup
-
-Run the full stack (Next.js + Socket + MongoDB + Redis):
-
-```
-docker-compose up --build
-```
-
----
-
-## 📡 Real-Time Event Flow
-
-1. User sends message
-2. Optimistic message added to UI
-3. API route saves message to MongoDB
-4. Server normalizes message to DTO
-5. Socket server broadcasts to conversation room
-6. Clients replace temporary message with confirmed one
-7. Delivery & seen updates are emitted back to sender
-
----
-
-## 🔒 Security Measures
-
-- Session validation in API routes
-- Server-side sender verification
-- Role-based access checks
-- Rate limiting on authentication & messaging endpoints
-- Secure upload token generation
-- Input validation using schemas
-- Protected admin routes
-
----
-
-## 📈 Future Improvements
-
-- End-to-End Encryption (E2EE)
-- Two-Factor Authentication (2FA)
-- Push Notifications
-- Advanced search with MongoDB aggregation
-- Unit & integration testing suite
-- CI/CD pipeline
-- Mobile application version
-
----
-
-## 🧠 What This Project Demonstrates
-
-- Real-time system architecture
-- Scalable WebSocket design
-- State management at scale
-- Clean client-server separation
-- Optimistic UI implementation
-- Production-grade folder structure
-- Admin control system implementation
-
----
-
-## 👨‍💻 Author
-
-**Harshdeep Singh**  
-Full-Stack Developer  
-Focused on real-time systems & scalable backend architecture  
-
----
-
-## 📜 License
-
-MIT License
+## Screenshots
