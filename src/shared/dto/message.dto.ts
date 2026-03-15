@@ -17,6 +17,8 @@ export interface MessageDTO {
     isDeleted?: boolean;
     isEdited?: boolean;
     editedAt?: string;
+    delivered?: boolean;
+    seen?: boolean;
 
     reactions?: {
         emoji: string;

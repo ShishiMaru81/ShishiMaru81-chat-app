@@ -10,7 +10,7 @@ export interface ClientMessage {
 
     content: string;
     messageType: "text" | "image" | "file" | "system" | "video" | "audio" | "voice";
-    status: "pending" | "failed" | "sent" | "delivered" | "queued";
+    status: "pending" | "failed" | "sent" | "delivered" | "seen" | "queued";
     sender: Pick<ClientUser, "_id" | "username" | "profilePicture">;
 
     createdAt: string;

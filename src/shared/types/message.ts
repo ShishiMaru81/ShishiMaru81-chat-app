@@ -21,4 +21,6 @@ export interface ClientMessage {
     updatedAt?: string;
     isEdited: boolean;
     isDeleted: boolean;
+    delivered?: boolean;
+    seen?: boolean;
 }
