@@ -18,8 +18,9 @@ export function typingHandler(io: IO, socket: Socket) {
     socket.on(SocketEvents.TYPING_START, (payload: { conversationId: string }) => {
 
         const { conversationId } = payload;
+        const room = `conversation:${conversationId}`;
 
-        socket.to(conversationId).emit(SocketEvents.TYPING_START, {
+        socket.to(room).emit(SocketEvents.TYPING_START, {
             conversationId,
             userId: socket.data.userId,
         });
@@ -27,8 +28,9 @@ export function typingHandler(io: IO, socket: Socket) {
 
     socket.on(SocketEvents.TYPING_STOP, (payload: { conversationId: string }) => {
         const { conversationId } = payload;
+        const room = `conversation:${conversationId}`;
 
-        socket.to(conversationId).emit(SocketEvents.TYPING_STOP, {
+        socket.to(room).emit(SocketEvents.TYPING_STOP, {
             conversationId,
             userId: socket.data.userId,
         });
