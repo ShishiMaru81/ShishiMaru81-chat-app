@@ -2,6 +2,12 @@
     "name": "@chat/types",
     "version": "1.0.0",
     "private": true,
+    "type": "module",
     "main": "index.ts",
-    "types": "index.ts"
+    "types": "index.ts",
+    "exports": {
+        ".": "./index.ts",
+        "./utils/message.guard": "./utils/message.guard.ts",
+        "./utils/internal-bridge-auth": "./utils/internal-bridge-auth.ts"
+    }
 }
