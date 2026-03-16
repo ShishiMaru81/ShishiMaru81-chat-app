@@ -1,6 +1,7 @@
 {
     "name": "@chat/socket",
     "private": true,
+    "type": "module",
     "scripts": {
         "dev": "tsx index.ts",
         "build": "tsc",
