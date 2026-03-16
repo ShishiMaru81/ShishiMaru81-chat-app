@@ -41,8 +41,9 @@ const Conversation = ({ conversation }: ConversationProps) => {
         (p): p is ClientUser => isUser(p) && p.email !== currentUserEmail
     );
 
-    const conversationImage =
-        conversation.image || otherUser?.profilePicture || "";
+    const conversationImage = conversation.isGroup
+        ? conversation.image || ""
+        : otherUser?.profilePicture || conversation.image || "";
     const avatarSrc = conversationImage
         ? getAvatarUrl(conversationImage, 128)
         : undefined;

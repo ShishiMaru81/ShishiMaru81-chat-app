@@ -51,7 +51,9 @@ const RightPanel = () => {
         ? selectedConversation.groupName
         : otherUser?.username || "Unknown";
 
-    const rawAvatarSrc = selectedConversation.image || otherUser?.profilePicture;
+    const rawAvatarSrc = selectedConversation.isGroup
+        ? selectedConversation.image
+        : otherUser?.profilePicture || selectedConversation.image;
     const avatarSrc = rawAvatarSrc ? getAvatarUrl(rawAvatarSrc, 128) : undefined;
     const avatarFallbackInitial =
         conversationName?.trim().charAt(0).toUpperCase() || "U";
