@@ -1,4 +1,5 @@
 import { getServerSession } from "next-auth";
+import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/Db/db";
 import { User } from "@/models/User";
 import { authOptions } from "./auth";
@@ -13,18 +14,21 @@ export async function getAuthUser(): Promise<AuthUser | null> {
     const session = await getServerSession(authOptions);
     if (!session?.user) return null;
 
-    if (session.user.id && session.user.email) {
+    const sessionId = session.user.id ? String(session.user.id) : "";
+    const sessionEmail = session.user.email ? String(session.user.email) : "";
+
+    if (sessionId && sessionEmail && mongoose.Types.ObjectId.isValid(sessionId)) {
         return {
-            id: String(session.user.id),
-            email: String(session.user.email),
+            id: sessionId,
+            email: sessionEmail,
             role: String(session.user.role || "user"),
         };
     }
 
-    if (!session.user.email) return null;
+    if (!sessionEmail) return null;
 
     await connectToDatabase();
-    const user = await User.findOne({ email: session.user.email })
+    const user = await User.findOne({ email: sessionEmail })
         .select("_id email role")
         .lean<{ _id: { toString(): string }; email: string; role?: string } | null>();
 

@@ -1,19 +1,18 @@
 // /pages/api/users.ts
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/utils/auth/auth";
 import { connectToDatabase } from "@/lib/Db/db";
 import { User } from "@/models/User";
+import { getAuthUser } from "@/lib/utils/auth/getAuthUser";
 
 
 
 export async function GET() {
-    const session = await getServerSession(authOptions);
-    if (!session) {
+    const authUser = await getAuthUser();
+    if (!authUser) {
         return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
     }
 
     await connectToDatabase();
 
-    const users = await User.find({ email: { $ne: session.user.name } }).select("-password");
+    const users = await User.find({ email: { $ne: authUser.email } }).select("-password");
     return new Response(JSON.stringify(users), { status: 200 });
 }

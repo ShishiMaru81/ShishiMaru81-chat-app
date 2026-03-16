@@ -1,19 +1,27 @@
 // /pages/api/me.ts
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/utils/auth/auth";
 import { connectToDatabase } from "@/lib/Db/db";
 import { User } from "@/models/User";
 import { NextResponse } from "next/server";
+import { getAuthUser } from "@/lib/utils/auth/getAuthUser";
+import mongoose from "mongoose";
 
 
 export async function GET() {
-    const session = await getServerSession(authOptions);
-    if (!session) {
+    const authUser = await getAuthUser();
+    if (!authUser) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     await connectToDatabase();
 
-    const user = await User.findOne({ email: session.user.email }).select("-password -isVerified -twoFactorEnabled");
+    const userById = mongoose.Types.ObjectId.isValid(authUser.id)
+        ? await User.findById(authUser.id).select("-password -isVerified -twoFactorEnabled")
+        : null;
+    const user = userById || (await User.findOne({ email: authUser.email }).select("-password -isVerified -twoFactorEnabled"));
+
+    if (!user) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
     return NextResponse.json(user);
 }

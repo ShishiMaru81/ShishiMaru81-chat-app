@@ -13,7 +13,7 @@ type InMemoryState = {
 class InMemoryRedisBatch {
     private commands: Array<() => Promise<unknown>> = [];
 
-    constructor(private readonly client: InMemoryRedisClient) {}
+    constructor(private readonly client: InMemoryRedisClient) { }
 
     set(key: string, value: string, ex?: string, ttl?: number) {
         this.commands.push(() => this.client.set(key, value, ex, ttl));
@@ -55,7 +55,7 @@ class InMemoryRedisBatch {
 }
 
 class InMemoryRedisClient {
-    constructor(private readonly state: InMemoryState) {}
+    constructor(private readonly state: InMemoryState) { }
 
     on() {
         return this;

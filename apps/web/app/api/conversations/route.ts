@@ -1,22 +1,24 @@
-// /pages/api/conversations.ts
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/utils/auth/auth";
 import { connectToDatabase } from "@/lib/Db/db";
 import { Conversation } from "@/models/Conversation";
 import { User } from "@/models/User";
 import { NextResponse } from "next/server";
+import { getAuthUser } from "@/lib/utils/auth/getAuthUser";
+import mongoose from "mongoose";
 
 
 export async function POST(req: Request) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session) {
+        const authUser = await getAuthUser();
+        if (!authUser) {
             return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
         }
 
         await connectToDatabase();
 
-        const currentUser = await User.findOne({ email: session.user.email });
+        const currentUserById = mongoose.Types.ObjectId.isValid(authUser.id)
+            ? await User.findById(authUser.id)
+            : null;
+        const currentUser = currentUserById || (await User.findOne({ email: authUser.email }));
         if (!currentUser) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
@@ -63,16 +65,18 @@ export async function POST(req: Request) {
 
 
 export async function GET() {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.email) {
+    const authUser = await getAuthUser();
+    if (!authUser) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
 
     try {
         await connectToDatabase();
-        const user = await User.findOne({ email: session.user.email });
+        const userById = mongoose.Types.ObjectId.isValid(authUser.id)
+            ? await User.findById(authUser.id)
+            : null;
+        const user = userById || (await User.findOne({ email: authUser.email }));
         if (!user) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
@@ -104,8 +108,8 @@ export async function GET() {
 }
 
 export async function DELETE(req: Request) {
-    const session = await getServerSession(authOptions);
-    if (!session) {
+    const authUser = await getAuthUser();
+    if (!authUser) {
         return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
     }
 
