@@ -16,7 +16,11 @@ export function initIO(
         },
     });
 
-    io.adapter(createAdapter(redis.pubClient, redis.subClient));
+    if (!redis.isMock) {
+        io.adapter(createAdapter(redis.pubClient, redis.subClient));
+    } else {
+        console.warn("⚠️ Running socket server without Redis adapter (development mock mode).");
+    }
 
     return io;
 }

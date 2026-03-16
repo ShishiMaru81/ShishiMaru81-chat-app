@@ -1,4 +1,7 @@
-import "dotenv/config";
+import { config as loadEnv } from "dotenv";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import express from "express";
 import http from "http";
 import cors from "cors";
@@ -9,7 +12,18 @@ import {
     getInternalSecret,
     hasValidInternalSecret,
     INTERNAL_SECRET_HEADER,
-} from "@chat/types";
+} from "@chat/types/utils/internal-bridge-auth";
+
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const localEnvPath = path.resolve(currentDir, ".env");
+const rootEnvPath = path.resolve(currentDir, "../../.env");
+
+if (existsSync(localEnvPath)) {
+    loadEnv({ path: localEnvPath });
+}
+if (existsSync(rootEnvPath)) {
+    loadEnv({ path: rootEnvPath });
+}
 
 
 const app = express();

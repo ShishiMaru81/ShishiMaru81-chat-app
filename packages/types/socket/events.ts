@@ -1,4 +1,4 @@
-import type { MessageDTO } from "../dto/message.dto.js";
+import type { MessageDTO } from "../dto/message.dto";
 import type {
     CallAnswerPayload,
     CallEndPayload,
@@ -34,7 +34,7 @@ import type {
     UserIdlePayload,
     UserOfflinePayload,
     UserOnlinePayload,
-} from "./payloads.js";
+} from "./payloads";
 
 export const SocketEvents = {
     MESSAGE_NEW: "message:new",

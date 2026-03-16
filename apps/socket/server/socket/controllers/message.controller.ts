@@ -1,6 +1,6 @@
-import * as messageService from "@/lib/services/message.service";
-import { CreateMessageInput } from "@/lib/validators/message.schema";
-import { Conversation } from "@/models/Conversation";
+import * as messageService from "../../../../../packages/services/message.service.js";
+import type { CreateMessageInput } from "../../../../../packages/services/validators/message.schema.js";
+import { Conversation } from "../../../../../packages/db/models/Conversation.js";
 
 export async function handleCreateMessage(data: CreateMessageInput, senderId: string) {
 
