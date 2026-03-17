@@ -3,11 +3,26 @@
     "version": "1.0.0",
     "private": true,
     "type": "module",
-    "main": "index.ts",
-    "types": "index.ts",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsc -p tsconfig.build.json"
+    },
     "exports": {
-        ".": "./index.ts",
-        "./utils/message.guard": "./utils/message.guard.ts",
-        "./utils/internal-bridge-auth": "./utils/internal-bridge-auth.ts"
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        },
+        "./utils/message.guard": {
+            "types": "./dist/utils/message.guard.d.ts",
+            "import": "./dist/utils/message.guard.js"
+        },
+        "./utils/internal-bridge-auth": {
+            "types": "./dist/utils/internal-bridge-auth.d.ts",
+            "import": "./dist/utils/internal-bridge-auth.js"
+        }
     }
 }
