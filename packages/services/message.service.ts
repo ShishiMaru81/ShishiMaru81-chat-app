@@ -27,7 +27,13 @@ export async function createMessage(data: CreateMessageInput, senderId: string) 
         throw new Error("Conversation not found");
     }
     const saved = await messageRepo.saveMessage(toSave);
-    conversation.lastMessage = saved;
+    conversation.lastMessage = {
+        _id: saved._id,
+        sender: saved.sender,
+        messageType: saved.messageType,
+        content: saved.content,
+        _creationTime: saved.createdAt ?? new Date(),
+    };
     await conversation.save();
 
     // Populate sender and repliedTo so normalizeMessage can serialize them safely.
@@ -44,35 +50,38 @@ export async function createMessage(data: CreateMessageInput, senderId: string) 
     return populated;
 }
 
-interface Reaction {
-    emoji: string;
-    users: string[];
-}
 export async function updateMessageReaction({ messageId, emoji, userId }: { messageId: string; emoji: string; userId: string }) {
-    const msg = await Message.findById(messageId);
+    const msg = await Message.findById(messageId).select("reactions");
     if (!msg) return null;
 
-    const reaction = msg.reactions.find((r: Reaction) => r.emoji === emoji);
+    const userObjectId = new Types.ObjectId(userId);
+    let alreadyReactedWithSameEmoji = false;
 
-    if (reaction) {
-        // Toggle 
-        const index = reaction.users.findIndex(
-            (u: string) => u.toString() === userId
+    if (msg.reactions instanceof Map) {
+        const users = msg.reactions.get(emoji) || [];
+        alreadyReactedWithSameEmoji = users.some(
+            (uid: Types.ObjectId) => uid.toString() === userObjectId.toString()
         );
-
-        if (index !== -1) reaction.users.splice(index, 1);
-        else reaction.users.push(userId);
-    } else {
-        // New reaction
-        msg.reactions.push({
-            emoji,
-            users: [userId],
-        });
     }
 
-    await msg.save();
+    const pullUpdate: Record<string, Types.ObjectId> = {};
+    if (msg.reactions instanceof Map) {
+        for (const key of msg.reactions.keys()) {
+            pullUpdate[`reactions.${key}`] = userObjectId;
+        }
+    }
 
-    // Populate 
+    if (Object.keys(pullUpdate).length > 0) {
+        await Message.updateOne({ _id: messageId }, { $pull: pullUpdate });
+    }
+
+    if (!alreadyReactedWithSameEmoji) {
+        await Message.updateOne(
+            { _id: messageId },
+            { $addToSet: { [`reactions.${emoji}`]: userObjectId } }
+        );
+    }
+
     const updated = await Message.findById(messageId)
         .populate([
             { path: "sender", select: "username avatarUrl" },

@@ -97,7 +97,7 @@ const Conversation = ({ conversation }: ConversationProps) => {
                     </div>
 
                     <p className="text-[12px] mt-1 text-gray-500 flex items-center gap-1">
-                        {lastMessage?.sender === user?._id && <MessageSeenSvg />}
+                        {lastMessage?.sender?._id === user?._id && <MessageSeenSvg />}
                         {conversation.isGroup && <Users size={16} />}
 
                         {!lastMessage && "Say Hi!"}

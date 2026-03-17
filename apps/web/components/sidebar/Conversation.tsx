@@ -141,7 +141,7 @@ const Conversation = ({ conversation }: ConversationProps) => {
 
                 {/* Message preview */}
                 <div className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))] mt-1 truncate">
-                    {lastMessage?.sender === user?._id && <MessageSeenSvg />}
+                    {lastMessage?.sender?._id === user?._id && <MessageSeenSvg />}
 
                     {conversation.isGroup && <Users size={14} />}
 
