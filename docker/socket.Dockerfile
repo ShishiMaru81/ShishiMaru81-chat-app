@@ -1,41 +1,42 @@
-# 🏗️ Build Stage: Compile TypeScript
-FROM node:20-alpine AS build
+FROM node:20-slim AS base
 
 WORKDIR /app
 
-# Enable BuildKit caching for npm
-# (requires: DOCKER_BUILDKIT=1 in your environment)
-COPY package*.json tsconfig.server.json ./
+
+# 1) Install workspace dependencies and build socket artifacts
+FROM base AS builder
+
+COPY package.json package-lock.json turbo.json tsconfig.json ./
+COPY apps ./apps
+COPY packages ./packages
+
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --legacy-peer-deps --prefer-offline --no-audit --progress=false
 
-# Copy source and build
-COPY . .
-RUN npx tsc --project tsconfig.server.json
+RUN npm run build --workspace @chat/types -- --types node \
+    && npm run build --workspace @chat/socket
 
-# Prune devDependencies to slim down runtime
-RUN npm prune --production
+RUN npm prune --omit=dev --legacy-peer-deps
 
 
-# 🧼 Production Stage: Slim runtime image
-FROM node:20-alpine AS socket
+# 2) Production runtime image
+FROM node:20-slim AS socket
 
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Copy only necessary runtime files
-COPY --from=build /app/package*.json ./
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/socket/package.json ./apps/socket/package.json
+COPY --from=builder /app/apps/socket/dist ./apps/socket/dist
+COPY --from=builder /app/packages/types/package.json ./packages/types/package.json
+COPY --from=builder /app/packages/types/dist ./packages/types/dist
 
-# Add non-root user for security
 RUN addgroup --system app && adduser --system --ingroup app app
 USER app
 
 EXPOSE 3001
 
-# Optional: Healthcheck for orchestrators
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
     CMD node -e "require('net').connect(3001).on('connect', () => process.exit(0)).on('error', () => process.exit(1))"
 
-CMD ["node", "dist/server/index.js"]
+CMD ["node", "apps/socket/dist/apps/socket/index.js"]
