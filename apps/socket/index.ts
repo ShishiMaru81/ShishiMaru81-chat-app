@@ -15,14 +15,22 @@ import {
 } from "@chat/types/utils/internal-bridge-auth";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
-const localEnvPath = path.resolve(currentDir, ".env");
-const rootEnvPath = path.resolve(currentDir, "../../.env");
+const visitedEnvPaths = new Set<string>();
+let scanDir = currentDir;
 
-if (existsSync(localEnvPath)) {
-    loadEnv({ path: localEnvPath });
-}
-if (existsSync(rootEnvPath)) {
-    loadEnv({ path: rootEnvPath });
+for (let depth = 0; depth < 8; depth++) {
+    const envPath = path.join(scanDir, ".env");
+
+    if (!visitedEnvPaths.has(envPath) && existsSync(envPath)) {
+        loadEnv({ path: envPath });
+        visitedEnvPaths.add(envPath);
+    }
+
+    const parent = path.dirname(scanDir);
+    if (parent === scanDir) {
+        break;
+    }
+    scanDir = parent;
 }
 
 
@@ -50,7 +58,6 @@ await initSocket(server);
 
 
 app.post("/internal/message-deleted", (req, res) => {
-    console.log("🔌 internal/message-deleted", req.body);
     const { conversationId, payload } = req.body;
 
     if (!conversationId || !payload) {
