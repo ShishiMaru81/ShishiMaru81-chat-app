@@ -1,5 +1,21 @@
 {
     "$schema": "https://turbo.build/schema.json",
+    "globalEnv": [
+        "MONGODB_URI",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "NEXTAUTH_SECRET",
+        "NEXTAUTH_URL",
+        "IMAGEKIT_PRIVATE_KEY",
+        "IMAGEKIT_PUBLIC_KEY",
+        "INTERNAL_SECRET",
+        "ORIGIN",
+        "REDIS_URL",
+        "SOCKET_SERVER_URL",
+        "SMTP_*",
+        "EMAIL_*",
+        "NEXT_PUBLIC_*"
+    ],
     "tasks": {
         "build": {
             "dependsOn": [
