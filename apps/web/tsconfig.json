@@ -1,0 +1,58 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./*"
+      ],
+      "@/models/*": [
+        "../../packages/db/models/*"
+      ],
+      "@/lib/Db/*": [
+        "../../packages/db/*"
+      ],
+      "@/lib/services/*": [
+        "../../packages/services/*"
+      ],
+      "@/lib/repositories/*": [
+        "../../packages/services/repositories/*"
+      ],
+      "@/lib/validators/*": [
+        "../../packages/services/validators/*"
+      ],
+      "@/server/normalizers/*": [
+        "../../packages/services/normalizers/*"
+      ],
+      "@/lib/socket/*": [
+        "./hooks/*"
+      ],
+      "@/lib/hooks/*": [
+        "./hooks/*"
+      ],
+      "@/lib/utils/*": [
+        "./lib/utils/*"
+      ]
+    },
+    "strict": false,
+    "noEmit": true,
+    "incremental": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
+  },
+  "include": [
+    "next-env.d.ts",
+    ".next/types/**/*.ts",
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
