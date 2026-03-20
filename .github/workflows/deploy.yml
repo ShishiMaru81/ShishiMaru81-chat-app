@@ -181,27 +181,16 @@ jobs:
     steps:
       - name: Validate dev secrets
         env:
-          VERCEL_DEPLOY_HOOK: ${{ secrets['VERCEL_DEPLOY_HOOK_DEV'] }}
-          RENDER_DEPLOY_HOOK: ${{ secrets['RENDER_DEPLOY_HOOK_DEV'] }}
           DEV_WEB_URL: ${{ vars['DEV_WEB_URL'] }}
           DEV_SOCKET_HEALTH_URL: ${{ vars['DEV_SOCKET_HEALTH_URL'] }}
         run: |
           set -euo pipefail
-          for var in VERCEL_DEPLOY_HOOK RENDER_DEPLOY_HOOK DEV_WEB_URL DEV_SOCKET_HEALTH_URL; do
+          for var in DEV_WEB_URL DEV_SOCKET_HEALTH_URL; do
             if [[ -z "${!var:-}" ]]; then
               echo "::error::Missing required secret: $var"
               exit 1
             fi
           done
-
-      - name: Trigger dev deployments
-        env:
-          VERCEL_DEPLOY_HOOK: ${{ secrets['VERCEL_DEPLOY_HOOK_DEV'] }}
-          RENDER_DEPLOY_HOOK: ${{ secrets['RENDER_DEPLOY_HOOK_DEV'] }}
-        run: |
-          set -euo pipefail
-          curl -fsSL -X POST "$VERCEL_DEPLOY_HOOK" >/dev/null
-          curl -fsSL -X POST "$RENDER_DEPLOY_HOOK" >/dev/null
 
       - name: Verify dev health checks
         env:
@@ -236,27 +225,16 @@ jobs:
     steps:
       - name: Validate staging secrets
         env:
-          VERCEL_DEPLOY_HOOK: ${{ secrets['VERCEL_DEPLOY_HOOK_STAGING'] }}
-          RENDER_DEPLOY_HOOK: ${{ secrets['RENDER_DEPLOY_HOOK_STAGING'] }}
           STAGING_WEB_URL: ${{ vars['STAGING_WEB_URL'] }}
           STAGING_SOCKET_HEALTH_URL: ${{ vars['STAGING_SOCKET_HEALTH_URL'] }}
         run: |
           set -euo pipefail
-          for var in VERCEL_DEPLOY_HOOK RENDER_DEPLOY_HOOK STAGING_WEB_URL STAGING_SOCKET_HEALTH_URL; do
+          for var in STAGING_WEB_URL STAGING_SOCKET_HEALTH_URL; do
             if [[ -z "${!var:-}" ]]; then
               echo "::error::Missing required secret: $var"
               exit 1
             fi
           done
-
-      - name: Trigger staging deployments
-        env:
-          VERCEL_DEPLOY_HOOK: ${{ secrets['VERCEL_DEPLOY_HOOK_STAGING'] }}
-          RENDER_DEPLOY_HOOK: ${{ secrets['RENDER_DEPLOY_HOOK_STAGING'] }}
-        run: |
-          set -euo pipefail
-          curl -fsSL -X POST "$VERCEL_DEPLOY_HOOK" >/dev/null
-          curl -fsSL -X POST "$RENDER_DEPLOY_HOOK" >/dev/null
 
       - name: Verify staging health checks
         env:
@@ -283,6 +261,8 @@ jobs:
           check_url "Staging socket" "$STAGING_SOCKET_HEALTH_URL"
 
   deploy-production:
+    environment: 
+      name: production
     name: Deploy Production
     runs-on: ubuntu-latest
     needs:
@@ -293,27 +273,17 @@ jobs:
     steps:
       - name: Validate production secrets
         env:
-          VERCEL_DEPLOY_HOOK: ${{ secrets['VERCEL_DEPLOY_HOOK_PROD'] }}
-          RENDER_DEPLOY_HOOK: ${{ secrets['RENDER_DEPLOY_HOOK_PROD'] }}
           PROD_WEB_URL: ${{ vars['PROD_WEB_URL'] }}
           PROD_SOCKET_HEALTH_URL: ${{ vars['PROD_SOCKET_HEALTH_URL'] }}
         run: |
           set -euo pipefail
-          for var in VERCEL_DEPLOY_HOOK RENDER_DEPLOY_HOOK PROD_WEB_URL PROD_SOCKET_HEALTH_URL; do
+          for var in PROD_WEB_URL PROD_SOCKET_HEALTH_URL; do
             if [[ -z "${!var:-}" ]]; then
               echo "::error::Missing required secret: $var"
               exit 1
             fi
           done
 
-      - name: Trigger production deployments
-        env:
-          VERCEL_DEPLOY_HOOK: ${{ secrets['VERCEL_DEPLOY_HOOK_PROD'] }}
-          RENDER_DEPLOY_HOOK: ${{ secrets['RENDER_DEPLOY_HOOK_PROD'] }}
-        run: |
-          set -euo pipefail
-          curl -fsSL -X POST "$VERCEL_DEPLOY_HOOK" >/dev/null
-          curl -fsSL -X POST "$RENDER_DEPLOY_HOOK" >/dev/null
 
       - name: Verify production health checks
         env:
