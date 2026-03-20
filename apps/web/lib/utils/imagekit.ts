@@ -1,17 +1,28 @@
-function appendImageKitTransform(url: string, size: number): string {
+function isTrustedImageKitUrl(value: string): boolean {
     try {
-        const parsed = new URL(url);
-        if (!parsed.hostname.includes("ik.imagekit.io")) {
-            return url;
+        const parsed = new URL(value);
+        const host = parsed.hostname.toLowerCase();
+
+        if (parsed.protocol !== "https:") {
+            return false;
         }
 
-        const existing = parsed.searchParams.get("tr");
-        const transform = `w-${size},h-${size},c-maintain_ratio`;
-        parsed.searchParams.set("tr", existing ? `${existing},${transform}` : transform);
-        return parsed.toString();
+        return host === "ik.imagekit.io";
     } catch {
+        return false;
+    }
+}
+
+function appendImageKitTransform(url: string, size: number): string {
+    if (!isTrustedImageKitUrl(url)) {
         return url;
     }
+
+    const parsed = new URL(url);
+    const existing = parsed.searchParams.get("tr");
+    const transform = "w-" + size + ",h-" + size + ",c-maintain_ratio";
+    parsed.searchParams.set("tr", existing ? existing + "," + transform : transform);
+    return parsed.toString();
 }
 
 type ImageKitUploadAuthResponse = {
