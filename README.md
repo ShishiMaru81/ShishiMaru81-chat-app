@@ -1,375 +1,139 @@
-# 🚀 Real-Time Chat Application
+# Chat App
 
-A production-grade real-time chat application built with **Next.js 15**, featuring group & direct messaging, authentication, optimistic UI updates, and live WebSocket communication.
+A production-oriented real-time chat monorepo built with Next.js 15, Socket.IO, MongoDB, and Turborepo.
 
-This project demonstrates scalable system design, clean architecture separation, and modern real-time application patterns.
+## Overview
 
----
+This repository is structured to separate web UI, real-time transport, and shared domain code. It supports direct and group conversations, presence, delivery and seen tracking, and admin moderation flows.
 
-## ✨ Features
+## Core capabilities
 
-### 💬 Messaging
-- Real-time messaging with Socket.IO
-- Group & direct conversations
-- Message edit & delete
-- Emoji reactions
-- Delivery & seen receipts
-- Day-based message grouping
-- Typing indicators
-- Online/offline presence tracking
+- Real-time direct and group messaging
+- Typing indicators and online presence
+- Message reactions, edits, and deletes
+- Delivery and seen states
+- NextAuth-based authentication (Google and credentials/OTP)
+- Image upload signing through ImageKit
+- Admin APIs for moderation and reporting
+- Docker Compose setup for local or containerized development
 
-### ⚡ User Experience
-- Optimistic UI with temporary messages
-- Smooth auto-scroll behavior
-- Dark/Light theme support
-- Clean and responsive UI
+## Monorepo structure
 
-### 📁 Media Support
-- Image uploads
-- File attachments
-- Profile picture management
-- Secure upload signing via ImageKit
-
-### 🔐 Authentication & Security
-- NextAuth authentication (Credentials + OAuth)
-- Session-based authentication
-- OTP verification system
-- Role-based access control (Admin/User)
-- API rate limiting
-- Input validation with schema validation
-- Protected routes via middleware
-
-### 📊 Admin System
-- Admin dashboard
-- User role management
-- Ban/Unban users
-- Conversation analytics
-- System stats overview
-
-### 🌐 Advanced Features
-- Offline message queue (IndexedDB)
-- Multi-device synchronization
-- DTO-based server-client normalization
-- Socket event contract architecture
-- Redis adapter support for scaling
-- Docker support
-
----
-
-## 🏗 Architecture Overview
-
-```
-Client (Next.js Frontend)
-        ↓
-Next.js API Routes (Business Logic + DB Writes)
-        ↓
-MongoDB (Persistence Layer)
-
-Socket Server (Transport Layer Only)
-        ↓
-Room-Based Event Broadcasting
-```
-
-### Architecture Principles
-
-- Separation of business logic and transport layer
-- Optimistic UI updates
-- DTO-based data normalization
-- Scalable socket room broadcasting
-- Clean modular folder structure
-- Production-ready structure
-
----
-
-## 🛠 Tech Stack
-
-### Frontend
-- Next.js 15
-- React
-- TypeScript
-- Tailwind CSS
-- Zustand (State Management)
-
-### Backend
-- Next.js API Routes
-- Express + Socket.IO (Transport Layer)
-
-### Database
-- MongoDB with Mongoose
-
-### Authentication
-- NextAuth.js
-
-### File Storage
-- ImageKit
-
-### DevOps
-- Docker
-- Redis Adapter
-
----
-
-## 📂 Project Structure
-
-```
-├── src
-│   ├── app
-│   │   ├── api
-│   │   ├── (chat)
-│   │   ├── admin
-│   │   └── auth
-│   ├── components
-│   │   ├── home
-│   │   ├── chat
-│   │   └── admin
-│   ├── models
-│   ├── store
-│   ├── lib
-│   ├── context
-│   └── types
+```text
+.
+├── apps/
+│   ├── web/        # Next.js app (UI + API routes)
+│   └── socket/     # Socket.IO transport server
+├── packages/
+│   ├── db/         # Mongo connection + models
+│   ├── services/   # Shared business logic, validators, repositories
+│   ├── redis/      # Redis and presence helpers
+│   └── types/      # Shared types and socket event contracts
+├── docker/
+├── nginx/
 ├── docker-compose.yml
-├── Dockerfile
-├── Dockerfile.socket
-└── socket.ts
+└── turbo.json
 ```
 
----
+## Architecture
 
-## ⚙️ Environment Variables
+1. The web app handles pages, authentication, and API endpoints.
+2. API routes use shared packages for validation, persistence, and normalization.
+3. The socket app handles real-time connections and room-based event broadcasting.
+4. Shared contracts in packages/types keep client and server payloads aligned.
+5. Redis is used for scalable socket coordination, with development-friendly behavior when not configured.
 
-Create a `.env.local` file:
+## Prerequisites
 
-```
-MONGODB_URI=your_mongodb_connection_string
-NEXTAUTH_SECRET=your_nextauth_secret
+- Node.js 20+
+- npm 10+
+- MongoDB
+- Redis (recommended)
+
+## Environment configuration
+
+Create a root .env file.
+
+```env
+# Core
+MONGODB_URI=mongodb://localhost:27017/chat-app
+NEXTAUTH_SECRET=replace_with_a_strong_secret
 NEXTAUTH_URL=http://localhost:3000
 
-GOOGLE_CLIENT_ID=your_google_client_id
-GOOGLE_CLIENT_SECRET=your_google_client_secret
-
+# Socket and internal bridge
+INTERNAL_SECRET=replace_with_shared_internal_secret
+ORIGIN=http://localhost:3000
+REDIS_URL=redis://localhost:6379
 NEXT_PUBLIC_SOCKET_URL=http://localhost:3001
-INTERNAL_SECRET=generate_a_long_random_secret_shared_by_next_and_socket_server
-NEXT_PUBLIC_PUBLIC_KEY=your_imagekit_public_key
-IMAGEKIT_PRIVATE_KEY=your_imagekit_private_key
+
+# OAuth (optional)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# ImageKit (required if image upload is enabled)
+NEXT_PUBLIC_PUBLIC_KEY=
+IMAGEKIT_PUBLIC_KEY=
+IMAGEKIT_PRIVATE_KEY=
+NEXT_PUBLIC_URI_ENDPOINT=
+
+# Email/OTP (optional)
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+EMAIL_USER=
+EMAIL_PASS=
+EMAIL_FROM=
 ```
 
----
+## Local development
 
-## 🧪 Getting Started
+1. Install dependencies.
 
-### 1️⃣ Install dependencies
-
-```
+```bash
 npm install
 ```
 
-### 2️⃣ Run the Next.js development server
+2. Start all workspaces in development mode.
 
-```
+```bash
 npm run dev
 ```
 
-4. Open [http://localhost:3000](http://localhost:3000) in your browser.
+3. Open the applications.
+- Web: http://localhost:3000
+- Socket server: http://localhost:3001
 
-## Tech Stack
+## Scripts
 
-- **Frontend**: Next.js 15, React, TypeScript, Tailwind CSS
-- **Backend**: Next.js API Routes, Socket.IO
-- **Database**: MongoDB with Mongoose
-- **Authentication**: NextAuth.js
-- **File Storage**: ImageKit
-- **Real-time**: Socket.IO
+From the repository root:
 
-## Project Structure
+| Script | Description |
+| --- | --- |
+| npm run dev | Runs development mode for all workspaces via Turborepo |
+| npm run build | Builds all workspaces |
+| npm run start | Starts production targets where defined |
+| npm run lint | Runs lint tasks across workspaces |
+| npm run clean | Runs clean tasks across workspaces |
 
+## Docker
+
+To run with containers:
+
+```bash
+docker compose up --build
 ```
-├── Bin
-│   ├── register
-│   │   └── route.ts
-│   ├── socketHandlers.ts
-│   └── useConversationId.ts
-├── components.json
-├── dist
-│   └── socket.js
-├── docker-compose.yml
-├── Dockerfile
-├── Dockerfile.socket
-├── eslint.config.mjs
-├── next-auth.d.ts
-├── next-env.d.ts
-├── next.config.ts
-├── package-lock.json
-├── package.json
-├── postcss.config.mjs
-├── public
-│   ├── bg-dark.png
-│   ├── bg-light.png
-│   ├── dall-e.png
-│   ├── desktop-hero.png
-│   ├── file.svg
-│   ├── globe.svg
-│   ├── gpt.png
-│   ├── next.svg
-│   ├── placeholder.png
-│   ├── vercel.svg
-│   └── window.svg
-├── README.md
-├── socket.ts
-├── src
-│   ├── app
-│   │   ├── (chat)
-│   │   ├── admin
-│   │   │   ├── page.tsx
-│   │   │   ├── settings
-│   │   │   │   └── page.tsx
-│   │   │   └── users
-│   │   │       └── page.tsx
-│   │   ├── api
-│   │   │   ├── admin
-│   │   │   │   ├── changeRoal
-│   │   │   │   │   └── route.ts
-│   │   │   │   ├── dashboard
-│   │   │   │   │   └── route.ts
-│   │   │   │   └── toggleban
-│   │   │   │       └── route.ts
-│   │   │   ├── auth
-│   │   │   │   ├── [...nextauth]
-│   │   │   │   │   └── route.ts
-│   │   │   │   ├── imagekit-auth
-│   │   │   │   │   └── route.ts
-│   │   │   │   ├── sendOtp
-│   │   │   │   │   └── route.ts
-│   │   │   │   └── verify-otp
-│   │   │   │       └── route.ts
-│   │   │   ├── conversations
-│   │   │   │   ├── [id]
-│   │   │   │   │   └── route.ts
-│   │   │   │   └── route.ts
-│   │   │   ├── me
-│   │   │   │   └── route.ts
-│   │   │   ├── messages
-│   │   │   │   ├── [id]
-│   │   │   │   │   ├── delete
-│   │   │   │   │   │   └── route.ts
-│   │   │   │   │   ├── edit
-│   │   │   │   │   │   └── route.ts
-│   │   │   │   │   └── react
-│   │   │   │   │       └── route.ts
-│   │   │   │   └── route.ts
-│   │   │   ├── testdb
-│   │   │   │   └── route.ts
-│   │   │   ├── updateImage
-│   │   │   │   └── route.ts
-│   │   │   ├── user
-│   │   │   │   └── [email]
-│   │   │   │       └── route.ts
-│   │   │   └── users
-│   │   │       └── route.ts
-│   │   ├── favicon.ico
-│   │   ├── globals.css
-│   │   ├── layout.tsx
-│   │   ├── login
-│   │   │   └── page.tsx
-│   │   ├── page.tsx
-│   │   └── register
-│   │       └── page.tsx
-│   ├── components
-│   │   ├── admin
-│   │   │   ├── Charts.tsx
-│   │   │   ├── ConversationTable.tsx
-│   │   │   ├── ReportTable.tsx
-│   │   │   ├── Sidebar.tsx
-│   │   │   ├── SystemStatus.tsx
-│   │   │   ├── TopStats.tsx
-│   │   │   ├── UserActions.tsx
-│   │   │   └── UserTable.tsx
-│   │   ├── chat
-│   │   │   └── reaction-bar.tsx
-│   │   ├── home
-│   │   │   ├── chat-bubble-avatar.tsx
-│   │   │   ├── chat-bubble.tsx
-│   │   │   ├── chat-placeholder.tsx
-│   │   │   ├── ChatBox.tsx
-│   │   │   ├── ChatDaySeparator.tsx
-│   │   │   ├── conversation.tsx
-│   │   │   ├── dialogs
-│   │   │   │   ├── FileUpload.tsx
-│   │   │   │   ├── user-list-dialog.tsx
-│   │   │   │   └── UserItem.tsx
-│   │   │   ├── group-members-dialog.tsx
-│   │   │   ├── ImageDebug.tsx
-│   │   │   ├── ImageUpload.tsx
-│   │   │   ├── left-panel.tsx
-│   │   │   ├── message-container.tsx
-│   │   │   ├── message-input.tsx
-│   │   │   ├── ProfilePictureUpload.tsx
-│   │   │   ├── right-panel.tsx
-│   │   │   ├── theme-switch.tsx
-│   │   │   ├── UserAvatar.tsx
-│   │   │   └── userProfile.tsx
-│   │   └── ui
-│   │       ├── avatar.tsx
-│   │       ├── button.tsx
-│   │       ├── card.tsx
-│   │       ├── dialog.tsx
-│   │       ├── dropdown-menu.tsx
-│   │       ├── input.tsx
-│   │       ├── label.tsx
-│   │       └── sonner.tsx
-│   ├── context
-│   │   └── UserContext.tsx
-│   ├── dummy-data
-│   │   └── db.ts
-│   ├── lib
-│   │   ├── api.ts
-│   │   ├── auth.ts
-│   │   ├── controllers
-│   │   │   └── message.controller.ts
-│   │   ├── Db
-│   │   │   └── offlineMessages.ts
-│   │   ├── db.ts
-│   │   ├── hooks
-│   │   │   ├── useNetworkStatus.ts
-│   │   │   ├── useOfflineMessageSync.ts
-│   │   │   └── useRateLimitHandler.ts
-│   │   ├── mongo.ts
-│   │   ├── rateLimiter.ts
-│   │   ├── repositories
-│   │   │   └── message.repo.ts
-│   │   ├── sendOtp.ts
-│   │   ├── services
-│   │   │   └── message.service.ts
-│   │   ├── socket.ts
-│   │   ├── socketClient.tsx
-│   │   ├── svgs.tsx
-│   │   ├── utils.ts
-│   │   └── validators
-│   │       └──  message.schema.ts
-│   ├── middleware.ts
-│   ├── models
-│   │   ├── Conversation.ts
-│   │   ├── Devices.ts
-│   │   ├── Message.ts
-│   │   ├── OTP.ts
-│   │   ├── TempMessage.ts
-│   │   └── User.ts
-│   ├── pages
-│   │   └── api
-│   │       └── socket.ts
-│   ├── providers
-│   │   └── theme-provider.tsx
-│   ├── store
-│   │   ├── chat-store.ts
-│   │   ├── offline-store.ts
-│   │   └── useSocketStore.ts
-│   └── types
-│       ├── conversation.ts
-│       ├── next-auth.d.ts
-│       └── user.ts
-├── tailwind.config.ts
-├── tsconfig.json
-├── tsconfig.server.json
-├── types.d.ts
-└── utils
-    └── imagekit.ts
-```
+
+The compose stack includes:
+
+- nginx
+- nextapp
+- socket
+- redis
+
+## Troubleshooting
+
+- If ports 3000 or 3001 are busy, stop the existing processes and restart.
+- If authentication fails, verify NEXTAUTH_SECRET and NEXTAUTH_URL.
+- If realtime events do not connect, verify ORIGIN, INTERNAL_SECRET, and NEXT_PUBLIC_SOCKET_URL.
+

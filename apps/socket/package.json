@@ -1,0 +1,28 @@
+{
+    "name": "@chat/socket",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "tsx index.ts",
+        "build": "tsc --noEmit false --outDir dist",
+        "start": "node dist/apps/socket/index.js",
+        "typecheck": "tsc --noEmit -p tsconfig.json"
+    },
+    "dependencies": {
+        "@chat/types": "*",
+        "@imagekit/nodejs": "^7.3.0",
+        "@socket.io/redis-adapter": "^8.3.0",
+        "bcryptjs": "^3.0.2",
+        "cors": "^2.8.5",
+        "dotenv": "^17.2.3",
+        "express": "^5.1.0",
+        "ioredis": "^5.10.0",
+        "mongodb": "^4.17.2",
+        "mongoose": "^8.16.2",
+        "nodemailer": "^7.0.13",
+        "redis": "^5.9.0",
+        "socket.io": "^4.8.1",
+        "uuid": "^13.0.0",
+        "zod": "^4.0.5"
+    }
+}

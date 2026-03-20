@@ -1,0 +1,28 @@
+{
+    "name": "@chat/types",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsc -p tsconfig.build.json"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        },
+        "./utils/message.guard": {
+            "types": "./dist/utils/message.guard.d.ts",
+            "import": "./dist/utils/message.guard.js"
+        },
+        "./utils/internal-bridge-auth": {
+            "types": "./dist/utils/internal-bridge-auth.d.ts",
+            "import": "./dist/utils/internal-bridge-auth.js"
+        }
+    }
+}
