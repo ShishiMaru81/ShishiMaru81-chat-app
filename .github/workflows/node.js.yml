@@ -135,6 +135,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+
+      - run: npm ci --workspace=@chat/web
+
       - name: Build socket image
         run: docker build -f docker/socket.Dockerfile -t chat-socket:ci .
 
@@ -155,13 +162,19 @@ jobs:
           exit 1
 
       - name: WebSocket connection test
+        working-directory: apps/web
         run: |
           node <<'NODE'
           const { io } = require("socket.io-client");
 
           const socket = io("http://localhost:3001", {
+            path: "/api/socket",
             transports: ["websocket"],
             timeout: 5000,
+            auth: {
+              userId: "ci-user",
+              isAdmin: false,
+            },
           });
 
           socket.on("connect", () => {
