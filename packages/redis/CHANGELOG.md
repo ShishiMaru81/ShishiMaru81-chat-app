@@ -1,6 +1,6 @@
-# @chat/auth
+# @chat/redis
 
-## 2.0.1
+## 1.0.1
 
 ### Patch Changes
 
@@ -14,14 +14,5 @@
 
   These fixes ensure the automated release pipeline correctly creates version tags and the deployment workflow is properly triggered, enabling end-to-end CI/CD automation for the monorepo.
 
-## 2.0.0
-
-### Major Changes
-
-- c5b8b6c: Migrate authentication to JWT with stronger session controls and security hardening.
-
-  - Replace legacy auth flow with access/refresh JWT tokens and server-backed session validation.
-  - Add tokenVersion-based global session invalidation for emergency token revocation.
-  - Harden login, refresh, logout, and logout-all flows with stricter validation and invalidation behavior.
-  - Update user schema for mixed provider accounts, including OAuth-only users with optional password.
-  - Apply OAuth/provider-linking and auth-route security hardening to close identified edge cases.
+- Updated dependencies [3b307d2]
+  - @chat/types@1.0.1
