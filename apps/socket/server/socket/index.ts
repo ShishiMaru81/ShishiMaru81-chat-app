@@ -10,6 +10,7 @@ import { deliveredHandler } from "./handlers/delivery/delivered.handler.js";
 import { SeenHandler } from "./handlers/delivery/seen.handler.js";
 import { cleanupStaleActiveUsers } from "./services/presence.redis.service.js";
 import { SocketEvents } from "@chat/types";
+import { User } from "../../../../packages/db/models/User.js";
 
 import { typingHandler } from "./handlers/typing/typing.handler.js";
 import type { Socket } from "socket.io";
@@ -26,6 +27,16 @@ export async function initSocket(server: HTTPServer) {
             try {
                 const staleUsers = await cleanupStaleActiveUsers(redis.appClient);
                 if (staleUsers.length === 0) return;
+
+                await User.updateMany(
+                    { _id: { $in: staleUsers } },
+                    {
+                        $set: {
+                            isOnline: false,
+                            lastSeen: new Date(),
+                        },
+                    }
+                );
 
                 for (const userId of staleUsers) {
                     io.emit(SocketEvents.USER_OFFLINE, {
