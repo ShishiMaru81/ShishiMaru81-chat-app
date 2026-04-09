@@ -1,9 +1,10 @@
 // src/server/socket/handlers/presence/presence.handler.ts
-import type { Server as IOServer } from "socket.io";
 import type { Redis } from "ioredis";
+import type { Server as IOServer } from "socket.io";
+
 import {
-    ServerToClientEvents,
     ClientToServerEvents,
+    ServerToClientEvents,
     SocketEvents,
 } from "@chat/types";
 import {
@@ -14,13 +15,11 @@ import {
 } from "../../services/presence.redis.service.js";
 
 type IO = IOServer<ClientToServerEvents, ServerToClientEvents>;
-type Socket = import("socket.io").Socket<
-    ClientToServerEvents,
-    ServerToClientEvents
->;
+type Socket = import("socket.io").Socket<ClientToServerEvents, ServerToClientEvents>;
 
 export function presenceHandler(io: IO, socket: Socket, redis: Redis) {
     const userId = socket.data.userId;
+
     if (!userId) {
         console.warn("presenceHandler: missing userId");
         return;
@@ -54,10 +53,13 @@ export function presenceHandler(io: IO, socket: Socket, redis: Redis) {
     socket.on("disconnect", async () => {
         try {
             const { wentOffline } = await trackSocketDisconnected(redis, userId, socket.id);
+
             if (wentOffline) {
+                const lastSeen = new Date();
+
                 io.emit(SocketEvents.USER_OFFLINE, {
                     userId,
-                    lastSeen: new Date(),
+                    lastSeen,
                 });
             }
         } catch (error) {

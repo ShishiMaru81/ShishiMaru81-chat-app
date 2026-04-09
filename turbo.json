@@ -23,8 +23,9 @@
                 "^build"
             ],
             "outputs": [
+                "dist/**",
                 ".next/**",
-                "dist/**"
+                "!.next/cache/**"
             ]
         },
         "dev": {
@@ -37,7 +38,23 @@
             ],
             "cache": false
         },
-        "lint": {},
+        "test": {
+            "dependsOn": [
+                "^test"
+            ]
+        },
+        "typecheck": {
+            "dependsOn": [
+                "^typecheck"
+            ],
+            "outputs": []
+        },
+        "lint": {
+            "dependsOn": [
+                "^lint"
+            ],
+            "outputs": []
+        },
         "clean": {
             "cache": false
         }
