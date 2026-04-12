@@ -199,6 +199,10 @@ export interface ConversationUpdatedPayload {
     };
 }
 
+export interface ConversationCreatedPayload {
+    conversationId: string;
+}
+
 export interface SyncMessagesPayload {
     conversationId: string;
     since: Date;
