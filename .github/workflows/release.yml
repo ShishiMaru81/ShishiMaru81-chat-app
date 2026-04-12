@@ -138,6 +138,15 @@ jobs:
           echo "Release metadata generated:"
           cat release-metadata.env
 
+      - name: Create GitHub Release
+        if: steps.metadata.outputs.deployable == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.metadata.outputs.release_tag }}" \
+            --title "${{ steps.metadata.outputs.release_tag }}" \
+            --generate-notes
+
       - name: Upload release metadata artifact
         uses: actions/upload-artifact@v4
         with:
