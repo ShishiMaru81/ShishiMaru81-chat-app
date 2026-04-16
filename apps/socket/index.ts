@@ -191,6 +191,50 @@ app.post("/internal/conversation-created", (req, res) => {
     return res.json({ success: true });
 });
 
+app.post("/internal/task-created", (req, res) => {
+    const { conversationId, payload } = req.body || {};
+
+    if (!conversationId || !payload) {
+        return res.status(400).json({ error: "Invalid payload" });
+    }
+
+    emitToConversation(conversationId, SocketEvents.TASK_CREATED, payload);
+    return res.json({ success: true });
+});
+
+app.post("/internal/task-updated", (req, res) => {
+    const { conversationId, payload } = req.body || {};
+
+    if (!conversationId || !payload) {
+        return res.status(400).json({ error: "Invalid payload" });
+    }
+
+    emitToConversation(conversationId, SocketEvents.TASK_UPDATED, payload);
+    return res.json({ success: true });
+});
+
+app.post("/internal/task-linked-to-message", (req, res) => {
+    const { conversationId, payload } = req.body || {};
+
+    if (!conversationId || !payload) {
+        return res.status(400).json({ error: "Invalid payload" });
+    }
+
+    emitToConversation(conversationId, SocketEvents.TASK_LINKED_TO_MESSAGE, payload);
+    return res.json({ success: true });
+});
+
+app.post("/internal/message-semantic-updated", (req, res) => {
+    const { conversationId, payload } = req.body || {};
+
+    if (!conversationId || !payload) {
+        return res.status(400).json({ error: "Invalid payload" });
+    }
+
+    emitToConversation(conversationId, SocketEvents.MESSAGE_SEMANTIC_UPDATED, payload);
+    return res.json({ success: true });
+});
+
 server.listen(3001, () => {
     console.log("🚀 Server running on http://localhost:3001");
 });

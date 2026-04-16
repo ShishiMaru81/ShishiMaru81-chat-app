@@ -1,3 +1,5 @@
+import type { MessageAiStatus, MessageSemanticType, TaskLinkType, TaskPriority, TaskRecord, TaskStatus } from "../task/task";
+
 export interface JoinConversationPayload {
     conversationId: string;
 }
@@ -230,4 +232,39 @@ export interface DashboardInitPayload {
 export interface DashboardUpdatePayload {
     activeUsers?: number;
     totalMessagesToday?: number;
+}
+
+export interface TaskCreatedPayload {
+    task: TaskRecord;
+    sourceMessageId: string | null;
+    createdByType: "user" | "agent" | "system";
+}
+
+export interface TaskUpdatedPayload {
+    taskId: string;
+    conversationId: string;
+    patch: Partial<Pick<TaskRecord, "title" | "description" | "status" | "priority" | "assignees" | "dueAt" | "tags" | "latestContextMessageId" | "updatedBy">>;
+    previousVersion: number;
+    newVersion: number;
+    updatedByType: "user" | "agent" | "system";
+    updatedById: string | null;
+}
+
+export interface TaskLinkedToMessagePayload {
+    taskId: string;
+    messageId: string;
+    conversationId: string;
+    linkType: TaskLinkType;
+    taskVersion: number;
+}
+
+export interface MessageSemanticUpdatedPayload {
+    messageId: string;
+    conversationId: string;
+    semanticType: MessageSemanticType;
+    semanticConfidence: number;
+    aiStatus: MessageAiStatus;
+    aiVersion: string | null;
+    linkedTaskIds: string[];
+    semanticProcessedAt: Date | string;
 }

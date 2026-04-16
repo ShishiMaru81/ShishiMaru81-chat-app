@@ -14,6 +14,7 @@ import type {
     ConversationUpdatedPayload,
     DashboardInitPayload,
     DashboardUpdatePayload,
+    MessageSemanticUpdatedPayload,
     MessageDeletePayload,
     MessageDeliveredPayload,
     MessageDeliveredUpdatePayload,
@@ -30,6 +31,9 @@ import type {
     SyncConversationsPayload,
     SyncMessagesPayload,
     SyncStatusPayload,
+    TaskCreatedPayload,
+    TaskLinkedToMessagePayload,
+    TaskUpdatedPayload,
     TypingPayload,
     UserActivePayload,
     UserIdlePayload,
@@ -52,6 +56,10 @@ export const SocketEvents = {
     MESSAGE_DELETE: "message:delete",
     MESSAGE_UNSEND: "message:unsend",
     MESSAGE_REACTION: "message:reaction",
+    TASK_CREATED: "task:created",
+    TASK_UPDATED: "task:updated",
+    TASK_LINKED_TO_MESSAGE: "task:linked_to_message",
+    MESSAGE_SEMANTIC_UPDATED: "message:semantic_updated",
     TYPING_START: "typing:start",
     TYPING_STOP: "typing:stop",
     USER_ONLINE: "user:online",
@@ -101,6 +109,11 @@ export interface ServerToClientEvents {
     [SocketEvents.MESSAGE_DELETE]: (data: MessageDeletePayload) => void;
     [SocketEvents.MESSAGE_UNSEND]: (data: MessageUnsendPayload) => void;
     [SocketEvents.MESSAGE_REACTION]: (data: MessageReactionPayload) => void;
+
+    [SocketEvents.TASK_CREATED]: (data: TaskCreatedPayload) => void;
+    [SocketEvents.TASK_UPDATED]: (data: TaskUpdatedPayload) => void;
+    [SocketEvents.TASK_LINKED_TO_MESSAGE]: (data: TaskLinkedToMessagePayload) => void;
+    [SocketEvents.MESSAGE_SEMANTIC_UPDATED]: (data: MessageSemanticUpdatedPayload) => void;
 
     // Typing
     [SocketEvents.TYPING_START]: (data: TypingPayload) => void;
