@@ -1,0 +1,19 @@
+{
+    "name": "@chat/task-worker",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "tsx index.ts",
+        "build": "tsc --noEmit false --outDir dist",
+        "start": "node dist/apps/task-worker/index.js",
+        "typecheck": "tsc --noEmit -p tsconfig.json"
+    },
+    "dependencies": {
+        "@chat/types": "*",
+        "dotenv": "^17.2.3",
+        "ioredis": "^5.10.0",
+        "mongoose": "^8.16.2",
+        "tsx": "^4.21.0"
+    }
+}
