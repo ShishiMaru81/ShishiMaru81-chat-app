@@ -43,6 +43,10 @@ const TASK_TERMS = [
 
 const DECISION_TERMS = ["decided", "decision", "approved", "go with", "choose", "selected"];
 const REMINDER_TERMS = ["remind", "reminder", "by tomorrow", "deadline", "due", "eod", "today"];
+const GITHUB_BUG_KEYWORDS = ["bug", "error", "issue", "fix", "broken"];
+const GITHUB_INTENT_KEYWORDS = ["create", "open", "report", "track"];
+const EMAIL_INTENT_KEYWORDS = ["send an email", "send email", "email ", "mail to", "notify by email"];
+const MEETING_INTENT_KEYWORDS = ["schedule a meeting", "schedule meeting", "book a meeting", "set up a meeting", "set up a call", "calendar invite", "sync up"];
 
 interface ClassificationResult {
     semanticType: MessageSemanticType;
@@ -132,6 +136,14 @@ function clampConfidence(value: number | undefined, fallback: number) {
     return value;
 }
 
+function hasAnyTerm(text: string, terms: string[]) {
+    return terms.some((term) => text.includes(term));
+}
+
+function isValidEmail(value: string) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 function buildTaskDescription(content: string) {
     const normalized = normalizeContent(content);
     if (!normalized) {
@@ -169,8 +181,21 @@ function buildEmailCopy(content: string, baseTitle: string) {
 
     return {
         subject: `Update: ${baseTitle}`.slice(0, 160),
-        body: `${sentence}${sentence.endsWith(".") ? "" : "."}\n\nRegards,\nTask Assistant`,
+        body: `${sentence}${sentence.endsWith(".") ? "" : "."}\n\nRegards,\nTaskFlow Intelligence Agent`,
     };
+}
+
+function buildImpactfulEmailSubject(content: string, baseTitle: string) {
+    const normalized = normalizeContent(content).toLowerCase();
+    if (normalized.includes("docker build failure")) {
+        return "🚨 Docker Build Failure Detected";
+    }
+
+    if (normalized.includes("login bug") || normalized.includes("login issue")) {
+        return "🚨 Login Bug Status Update";
+    }
+
+    return `🚨 ${baseTitle}`.slice(0, 160);
 }
 
 function buildStrictEmailTemplate(content: string, baseTitle: string, recipients: string[]) {
@@ -181,9 +206,10 @@ function buildStrictEmailTemplate(content: string, baseTitle: string, recipients
     const cleanUpdate = requestedUpdate.charAt(0).toUpperCase() + requestedUpdate.slice(1).replace(/[.\s]+$/g, "");
 
     const recipientLabel = recipients.length > 0 ? recipients[0] : "there";
+    const impactfulSubject = buildImpactfulEmailSubject(content, baseTitle);
 
     return {
-        subject: `Status Update: ${baseTitle}`.slice(0, 160),
+        subject: impactfulSubject,
         body: [
             `Hello ${recipientLabel},`,
             "",
@@ -192,7 +218,7 @@ function buildStrictEmailTemplate(content: string, baseTitle: string, recipients
             "Please let me know if you need any additional details.",
             "",
             "Best regards,",
-            "Taskflow Assistant",
+            "TaskFlow Intelligence Agent",
         ].join("\n"),
     };
 }
@@ -205,8 +231,6 @@ function buildStrictMeetingTemplate(content: string, baseTitle: string, hints: {
         .trim();
 
     const objective = meetingGoal.length > 0 ? meetingGoal : "Discuss the requested update and next steps";
-    const whenLine = hints.whenText ? `Proposed time: ${hints.whenText}.` : "Proposed time: To be confirmed.";
-    const attendeesLine = hints.attendeesText ? `Attendees: ${hints.attendeesText}.` : "Attendees: To be confirmed.";
 
     return {
         summary: `Meeting Request: ${baseTitle}`.slice(0, 200),
@@ -214,8 +238,8 @@ function buildStrictMeetingTemplate(content: string, baseTitle: string, hints: {
             "Objective:",
             `${objective.charAt(0).toUpperCase()}${objective.slice(1)}.`,
             "",
-            whenLine,
-            attendeesLine,
+            `Proposed time: ${hints.whenText ?? "To be confirmed"}.`,
+            `Attendees: ${hints.attendeesText ?? "To be confirmed"}.`,
             "",
             "Agenda:",
             "1) Review current status",
@@ -276,25 +300,63 @@ function extractMeetingHints(content: string) {
 function inferExplicitAction(content: string): TaskExecutionActionType | null {
     const normalized = normalizeContent(content).toLowerCase();
     const emailRecipients = extractEmailRecipients(content);
+    const hasGithubBug = hasAnyTerm(normalized, GITHUB_BUG_KEYWORDS);
+    const hasGithubIntent = hasAnyTerm(normalized, GITHUB_INTENT_KEYWORDS);
 
-    if (emailRecipients.length > 0 || ["send an email", "send email", "email ", "mail to", "notify by email"].some((term) => normalized.includes(term))) {
+    if (hasGithubBug && hasGithubIntent) {
+        return "create_github_issue";
+    }
+
+    if (emailRecipients.length > 0 || hasAnyTerm(normalized, EMAIL_INTENT_KEYWORDS)) {
         return "send_email";
     }
 
-    if (["schedule a meeting", "schedule meeting", "book a meeting", "set up a meeting", "set up a call", "calendar invite", "sync up"].some((term) => normalized.includes(term))) {
+    if (hasAnyTerm(normalized, MEETING_INTENT_KEYWORDS)) {
         return "schedule_meeting";
-    }
-
-    if (["bug", "issue", "error", "broken", "fix", "regression"].some((term) => normalized.includes(term))) {
-        return "create_github_issue";
     }
 
     return null;
 }
 
-function normalizeExecutionParameters(content: string, decision: TaskExecutionDecision): TaskExecutionDecision {
+function computeNeedsApproval(actionType: TaskExecutionActionType, confidence: number, parameters: Record<string, unknown>) {
+    if (actionType === "send_email") {
+        const recipients = Array.isArray(parameters.to)
+            ? parameters.to.filter((value): value is string => typeof value === "string" && isValidEmail(value))
+            : typeof parameters.to === "string" && isValidEmail(parameters.to)
+                ? [parameters.to]
+                : [];
+
+        if (recipients.length > 0) {
+            return false;
+        }
+    }
+
+    return confidence < 0.7;
+}
+
+function finalizeExecutionDecision(decision: TaskExecutionDecision): TaskExecutionDecision {
+    const normalizedConfidence = decision.actionType !== "none"
+        ? Math.max(clampConfidence(decision.confidence, 0.5), 0.85)
+        : clampConfidence(decision.confidence, 0.5);
+
+    return {
+        ...decision,
+        confidence: normalizedConfidence,
+        needsApproval: computeNeedsApproval(decision.actionType, normalizedConfidence, decision.parameters),
+    };
+}
+
+function normalizeExecutionParameters(
+    content: string,
+    decision: TaskExecutionDecision,
+    options?: { allowHeuristicActionFallback?: boolean }
+): TaskExecutionDecision {
     const explicitAction = inferExplicitAction(content);
-    const actionType = explicitAction ?? decision.actionType;
+    const actionType = decision.actionType !== "none"
+        ? decision.actionType
+        : options?.allowHeuristicActionFallback
+            ? (explicitAction ?? "none")
+            : "none";
     const emailRecipients = extractEmailRecipients(content);
     const meetingHints = extractMeetingHints(content);
     const baseTitle = toTaskTitle(content);
@@ -325,7 +387,7 @@ function normalizeExecutionParameters(content: string, decision: TaskExecutionDe
             || rawBody.startsWith("send an email")
             || rawBody.includes(" saying ");
 
-        return {
+        return finalizeExecutionDecision({
             ...decision,
             actionType,
             parameters: {
@@ -339,13 +401,13 @@ function normalizeExecutionParameters(content: string, decision: TaskExecutionDe
                     : (shouldRewriteBody ? polished.body : decision.parameters.body),
             },
             confidence: Math.max(decision.confidence, to.length > 0 ? 0.9 : 0.8),
-            needsApproval: decision.needsApproval || to.length === 0,
-        };
+            needsApproval: false,
+        });
     }
 
     if (actionType === "schedule_meeting") {
         const strictMeeting = buildStrictMeetingTemplate(content, baseTitle, meetingHints);
-        return {
+        return finalizeExecutionDecision({
             ...decision,
             actionType,
             parameters: {
@@ -364,13 +426,13 @@ function normalizeExecutionParameters(content: string, decision: TaskExecutionDe
                     : (typeof decision.parameters.attendeesText === "string" ? decision.parameters.attendeesText : meetingHints.attendeesText),
             },
             confidence: Math.max(decision.confidence, 0.78),
-            needsApproval: true,
-        };
+            needsApproval: false,
+        });
     }
 
     if (actionType === "create_github_issue") {
         const strictIssue = buildStrictGithubIssueTemplate(content, baseTitle);
-        return {
+        return finalizeExecutionDecision({
             ...decision,
             actionType,
             parameters: {
@@ -383,14 +445,14 @@ function normalizeExecutionParameters(content: string, decision: TaskExecutionDe
                     : (typeof decision.parameters.body === "string" ? decision.parameters.body : content),
             },
             confidence: Math.max(decision.confidence, 0.7),
-            needsApproval: Boolean(decision.needsApproval && decision.confidence < 0.8),
-        };
+            needsApproval: false,
+        });
     }
 
-    return {
+    return finalizeExecutionDecision({
         ...decision,
         actionType,
-    };
+    });
 }
 
 function buildActionSummary(actionType: TaskExecutionActionType, parameters: Record<string, unknown>) {
@@ -410,7 +472,33 @@ function buildActionSummary(actionType: TaskExecutionActionType, parameters: Rec
 function decideExecutionActionFromHeuristics(content: string): TaskExecutionDecision {
     const normalized = normalizeContent(content).toLowerCase();
 
-    if (inferExplicitAction(content) === "send_email") {
+    const explicitAction = inferExplicitAction(content);
+    if (explicitAction === "create_github_issue") {
+        return {
+            actionType: "create_github_issue",
+            parameters: {
+                title: toTaskTitle(content),
+                body: content,
+            },
+            confidence: 0.78,
+            needsApproval: false,
+        };
+    }
+
+    if (explicitAction === "schedule_meeting") {
+        return {
+            actionType: "schedule_meeting",
+            parameters: {
+                summary: toTaskTitle(content),
+                notes: content,
+                ...extractMeetingHints(content),
+            },
+            confidence: 0.76,
+            needsApproval: false,
+        };
+    }
+
+    if (explicitAction === "send_email") {
         return {
             actionType: "send_email",
             parameters: {
@@ -419,22 +507,6 @@ function decideExecutionActionFromHeuristics(content: string): TaskExecutionDeci
                 body: content,
             },
             confidence: 0.86,
-            needsApproval: false,
-        };
-    }
-
-    const isBugOrFix = ["bug", "issue", "error", "broken", "fix", "regression"].some((term) =>
-        normalized.includes(term)
-    );
-
-    if (isBugOrFix) {
-        return {
-            actionType: "create_github_issue",
-            parameters: {
-                title: toTaskTitle(content),
-                body: content,
-            },
-            confidence: 0.74,
             needsApproval: false,
         };
     }
@@ -452,7 +524,7 @@ function decideExecutionActionFromHeuristics(content: string): TaskExecutionDeci
                 ...extractMeetingHints(content),
             },
             confidence: 0.7,
-            needsApproval: true,
+            needsApproval: false,
         };
     }
 
@@ -469,7 +541,7 @@ function decideExecutionActionFromHeuristics(content: string): TaskExecutionDeci
                 body: content,
             },
             confidence: 0.68,
-            needsApproval: true,
+            needsApproval: false,
         };
     }
 
@@ -567,9 +639,20 @@ async function classifyMessageWithLLM(content: string): Promise<IntelligenceDeci
     });
 
     if (!response.ok) {
+        const normalizedFallbackExecution = normalizeExecutionParameters(content, fallbackExecution, {
+            allowHeuristicActionFallback: true,
+        });
+        const fallbackSemanticType = normalizedFallbackExecution.actionType !== "none"
+            ? "task"
+            : fallbackClassification.semanticType;
         return {
-            classification: fallbackClassification,
-            execution: normalizeExecutionParameters(content, fallbackExecution),
+            classification: {
+                semanticType: fallbackSemanticType,
+                confidence: fallbackSemanticType === "task"
+                    ? Math.max(fallbackClassification.confidence, 0.85)
+                    : fallbackClassification.confidence,
+            },
+            execution: normalizedFallbackExecution,
             taskDraft: normalizeTaskDraft(content, null),
         };
     }
@@ -582,12 +665,15 @@ async function classifyMessageWithLLM(content: string): Promise<IntelligenceDeci
             "{}";
 
         const parsed = JSON.parse(jsonText) as LlmDecision;
-        const normalizedExecution = normalizeExecutionParameters(content, {
+        const llmExecution: TaskExecutionDecision = {
             actionType: parsed.actionType,
             parameters: parsed.parameters && typeof parsed.parameters === "object" ? parsed.parameters : {},
             confidence: clampConfidence(parsed.confidence, fallbackExecution.confidence),
             needsApproval: Boolean(parsed.needsApproval),
-        });
+        };
+        const normalizedExecution = parsed.actionType === "none"
+            ? normalizeExecutionParameters(content, fallbackExecution, { allowHeuristicActionFallback: true })
+            : normalizeExecutionParameters(content, llmExecution, { allowHeuristicActionFallback: false });
         const taskDraft = normalizeTaskDraft(content, {
             title: parsed.taskTitle,
             description: parsed.taskDescription,
@@ -608,7 +694,9 @@ async function classifyMessageWithLLM(content: string): Promise<IntelligenceDeci
             taskDraft,
         };
     } catch {
-        const normalizedFallbackExecution = normalizeExecutionParameters(content, fallbackExecution);
+        const normalizedFallbackExecution = normalizeExecutionParameters(content, fallbackExecution, {
+            allowHeuristicActionFallback: true,
+        });
         const fallbackSemanticType = normalizedFallbackExecution.actionType !== "none"
             ? "task"
             : fallbackClassification.semanticType;
