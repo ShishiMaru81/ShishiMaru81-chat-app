@@ -5,9 +5,9 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TaskExecutionActionType, TaskExecutionUpdatedPayload, TaskResult, TaskUpdatedPayload } from "@chat/types";
-import * as outboxModule from "../../packages/services/outbox.service";
-import * as intelligenceModule from "../../packages/services/task-intelligence.service";
-import * as taskModule from "../../packages/db/models/Task";
+import * as outboxModule from "@chat/services/outbox.service";
+import * as intelligenceModule from "@chat/services/task-intelligence.service";
+import * as taskModule from "@chat/db/models/Task";
 import { RetryManager } from "./services/retry-manager.js";
 import AgentRunner from "./services/agent-runner.js";
 

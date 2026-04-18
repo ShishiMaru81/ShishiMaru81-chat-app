@@ -1,8 +1,8 @@
 import type { TaskCheckpoint, TaskExecutionActionType, TaskExecutionHistory, TaskResult, TaskUpdatedPayload, TaskValidationLog } from "@chat/types";
 import { RetryManager } from "./retry-manager.js";
-import { TaskPlanner } from "../../../packages/services/task-planner.service";
-import * as taskRepo from "../../../packages/services/repositories/task.repo";
-import * as taskModule from "../../../packages/db/models/Task";
+import * as taskPlannerModule from "@chat/services/task-planner.service";
+import * as taskRepo from "@chat/services/repositories/task.repo";
+import * as taskModule from "@chat/db/models/Task";
 import ToolRegistry, { type ToolExecutionTask, type ToolResult } from "./tools/tool-registry.js";
 import TaskSuccessRegistry, { createDefaultTaskSuccessRegistry } from "./task-success-registry.js";
 import { CreateIssueTool } from "./tools/create-issue.tool.js";
@@ -13,6 +13,12 @@ const INTERNAL_SECRET_HEADER = "x-internal-secret";
 
 type TaskModelLike = {
     findById: (id: string) => Promise<TaskDocumentLike | null>;
+};
+
+type TaskPlannerLike = {
+    planTask: (taskId: string) => Promise<{ parentTaskId: string; subTaskIds: string[]; planned: boolean }>;
+    getSubTasks: (parentTaskId: string) => Promise<Array<{ _id: { toString(): string }; status: string }>>;
+    getNextExecutableTasks: (parentTaskId: string) => Promise<Array<{ _id: { toString(): string }; status: string }>>;
 };
 
 type ExecutionActionRecord = {
@@ -112,10 +118,28 @@ function resolveTaskModel(moduleNs: unknown): TaskModelLike {
     throw new Error(`Task model exports are invalid. keys=${Object.keys(asRecord || {}).join(",")}`);
 }
 
+function resolveTaskPlannerConstructor(moduleNs: unknown): new () => TaskPlannerLike {
+    const asRecord = moduleNs as Record<string, unknown>;
+    const defaultExport = asRecord?.default as Record<string, unknown> | undefined;
+    const candidates: unknown[] = [
+        asRecord?.TaskPlanner,
+        defaultExport?.TaskPlanner,
+        defaultExport,
+    ];
+
+    for (const candidate of candidates) {
+        if (typeof candidate === "function") {
+            return candidate as new () => TaskPlannerLike;
+        }
+    }
+
+    throw new Error(`Task planner exports are invalid. keys=${Object.keys(asRecord || {}).join(",")}`);
+}
+
 export class AgentRunner {
     private readonly retryManager: RetryManager;
     private readonly taskModel: TaskModelLike;
-    private readonly taskPlanner: TaskPlanner;
+    private readonly taskPlanner: TaskPlannerLike;
     private readonly toolRegistry: ToolRegistry;
     private readonly taskSuccessRegistry: TaskSuccessRegistry;
     private readonly internalBaseUrl: string;
@@ -129,7 +153,8 @@ export class AgentRunner {
     }) {
         this.retryManager = options?.retryManager ?? new RetryManager([1000, 2000, 5000]);
         this.taskModel = options?.taskModel ?? resolveTaskModel(taskModule);
-        this.taskPlanner = new TaskPlanner();
+        const TaskPlannerCtor = resolveTaskPlannerConstructor(taskPlannerModule);
+        this.taskPlanner = new TaskPlannerCtor();
         this.toolRegistry = options?.toolRegistry ?? this.createDefaultToolRegistry();
         this.taskSuccessRegistry = options?.taskSuccessRegistry ?? createDefaultTaskSuccessRegistry();
         this.internalBaseUrl = options?.internalBaseUrl ?? process.env.SOCKET_SERVER_URL ?? process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:3001";
