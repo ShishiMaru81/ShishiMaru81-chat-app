@@ -3,6 +3,10 @@ import { RetryManager } from "./retry-manager.js";
 import { TaskPlanner } from "../../../packages/services/task-planner.service";
 import * as taskRepo from "../../../packages/services/repositories/task.repo";
 import * as taskModule from "../../../packages/db/models/Task";
+import ToolRegistry, { type ToolExecutionTask, type ToolResult } from "./tools/tool-registry.js";
+import { CreateIssueTool } from "./tools/create-issue.tool.js";
+import { ScheduleMeetingTool } from "./tools/schedule-meeting.tool.js";
+import { SendEmailTool } from "./tools/send-email.tool.js";
 
 const INTERNAL_SECRET_HEADER = "x-internal-secret";
 
@@ -66,6 +70,12 @@ type RunTaskOutcome = {
     verification: VerificationOutcome | null;
 };
 
+type ToolExecutionOutcome = {
+    result: ActionExecutionResult;
+    toolName: string;
+    capability: string;
+};
+
 function wait(ms: number) {
     return new Promise((resolve) => {
         setTimeout(resolve, ms);
@@ -113,17 +123,28 @@ export class AgentRunner {
     private readonly retryManager: RetryManager;
     private readonly taskModel: TaskModelLike;
     private readonly taskPlanner: TaskPlanner;
+    private readonly toolRegistry: ToolRegistry;
     private readonly internalBaseUrl: string;
 
     constructor(options?: {
         retryManager?: RetryManager;
         taskModel?: TaskModelLike;
+        toolRegistry?: ToolRegistry;
         internalBaseUrl?: string;
     }) {
         this.retryManager = options?.retryManager ?? new RetryManager([1000, 2000, 5000]);
         this.taskModel = options?.taskModel ?? resolveTaskModel(taskModule);
         this.taskPlanner = new TaskPlanner();
+        this.toolRegistry = options?.toolRegistry ?? this.createDefaultToolRegistry();
         this.internalBaseUrl = options?.internalBaseUrl ?? process.env.SOCKET_SERVER_URL ?? process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:3001";
+    }
+
+    private createDefaultToolRegistry() {
+        const registry = new ToolRegistry();
+        registry.register(new SendEmailTool());
+        registry.register(new ScheduleMeetingTool());
+        registry.register(new CreateIssueTool());
+        return registry;
     }
 
     async runTask(taskId: string): Promise<RunTaskOutcome> {
@@ -468,26 +489,17 @@ export class AgentRunner {
         }
     }
 
-    private async execute(payload: ExecutionActionRecord): Promise<ActionExecutionResult> {
-        console.log("agent-runner step:execute", {
-            taskId: payload.taskId,
-            actionType: payload.actionType,
-            parameters: payload.parameters,
-        });
-
-        switch (payload.actionType) {
+    private capabilityForActionType(actionType: TaskExecutionActionType) {
+        switch (actionType) {
             case "send_email":
-                return this.executeSendEmail(payload);
+                return "send_email";
             case "schedule_meeting":
-                return this.executeScheduleMeeting(payload);
+                return "schedule_meeting";
             case "create_github_issue":
-                return this.executeGithubIssue(payload);
+                return "create_issue";
+            case "none":
             default:
-                return {
-                    summary: "No executable action selected.",
-                    adapterSuccess: true,
-                    evidence: { actionType: payload.actionType },
-                };
+                return "none";
         }
     }
 
@@ -498,6 +510,94 @@ export class AgentRunner {
         });
 
         return result;
+    }
+
+    private async execute(payload: ExecutionActionRecord): Promise<ActionExecutionResult> {
+        const capability = this.capabilityForActionType(payload.actionType);
+        const tools = this.toolRegistry.findToolsByCapability(capability);
+
+        console.log("agent-runner step:execute", {
+            taskId: payload.taskId,
+            actionType: payload.actionType,
+            capability,
+            toolCount: tools.length,
+            parameters: payload.parameters,
+        });
+
+        if (tools.length === 0) {
+            return {
+                summary: `No tool registered for capability ${capability}.`,
+                adapterSuccess: false,
+                evidence: { actionType: payload.actionType, capability },
+                error: `No tool registered for capability ${capability}`,
+            };
+        }
+
+        const executionTask: ToolExecutionTask = {
+            taskId: payload.taskId,
+            conversationId: payload.conversationId,
+            capability,
+            actionType: payload.actionType,
+            parameters: payload.parameters,
+            messageId: payload.messageId,
+        };
+
+        let lastFailure: ToolResult | null = null;
+
+        for (const tool of tools) {
+            try {
+                const result = await tool.execute(executionTask);
+                console.log("agent-runner step:tool-execute", {
+                    taskId: payload.taskId,
+                    capability,
+                    toolName: tool.name,
+                    success: result.adapterSuccess,
+                });
+
+                if (result.adapterSuccess) {
+                    return {
+                        ...result,
+                        evidence: {
+                            toolName: tool.name,
+                            capability,
+                            result: result.evidence,
+                        },
+                    };
+                }
+
+                lastFailure = result;
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "unknown tool error";
+                lastFailure = {
+                    summary: `Tool ${tool.name} failed.`,
+                    adapterSuccess: false,
+                    evidence: {
+                        toolName: tool.name,
+                        capability,
+                        reason: message,
+                    },
+                    error: message,
+                };
+
+                console.warn("agent-runner step:tool-failure", {
+                    taskId: payload.taskId,
+                    capability,
+                    toolName: tool.name,
+                    reason: message,
+                });
+            }
+        }
+
+        return {
+            summary: lastFailure?.summary ?? `All tools failed for capability ${capability}.`,
+            adapterSuccess: false,
+            evidence: {
+                capability,
+                toolCount: tools.length,
+                lastFailure: lastFailure?.evidence ?? null,
+            },
+            error: lastFailure?.error ?? `All tools failed for capability ${capability}`,
+        };
     }
 
     private async verify(result: ActionExecutionResult, context: LoopContext): Promise<VerificationOutcome> {
@@ -630,143 +730,6 @@ export class AgentRunner {
         }
 
         return { success: false, confidence: 0.24 };
-    }
-
-    private async executeSendEmail(payload: ExecutionActionRecord): Promise<ActionExecutionResult> {
-        const apiKey = process.env.RESEND_API_KEY;
-        const from = process.env.RESEND_FROM_EMAIL;
-
-        if (!apiKey || !from) {
-            throw new Error("Email adapter is not configured. Set RESEND_API_KEY and RESEND_FROM_EMAIL.");
-        }
-
-        const to = Array.isArray(payload.parameters?.to)
-            ? payload.parameters.to
-            : typeof payload.parameters?.to === "string"
-                ? [payload.parameters.to]
-                : [];
-
-        if (to.length === 0) {
-            throw new Error("Email adapter requires parameters.to");
-        }
-
-        const subject = typeof payload.parameters?.subject === "string"
-            ? payload.parameters.subject
-            : `Task update ${payload.taskId}`;
-
-        const body = typeof payload.parameters?.body === "string"
-            ? payload.parameters.body
-            : `Automated update for task ${payload.taskId}.`;
-
-        const response = await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                from,
-                to,
-                subject,
-                text: body,
-            }),
-        });
-
-        const responseText = await response.text();
-        let responseBody: unknown = responseText;
-        try {
-            responseBody = responseText.length > 0 ? JSON.parse(responseText) : null;
-        } catch {
-            responseBody = responseText;
-        }
-
-        return {
-            summary: response.ok ? `Sent email to ${to.join(", ")}.` : `Email sending failed with status ${response.status}.`,
-            adapterSuccess: response.ok,
-            evidence: {
-                responseStatus: response.status,
-                responseBody,
-                to,
-            },
-            ...(response.ok ? {} : { error: typeof responseBody === "string" ? responseBody.slice(0, 500) : undefined }),
-        };
-    }
-
-    private async executeScheduleMeeting(payload: ExecutionActionRecord): Promise<ActionExecutionResult> {
-        const webhookUrl = process.env.SCHEDULE_MEETING_WEBHOOK_URL;
-        if (!webhookUrl) {
-            throw new Error("Schedule meeting adapter is not configured. Set SCHEDULE_MEETING_WEBHOOK_URL.");
-        }
-
-        const response = await fetch(webhookUrl, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                taskId: payload.taskId,
-                conversationId: payload.conversationId,
-                triggerMessageId: payload.messageId,
-                parameters: payload.parameters ?? {},
-            }),
-        });
-
-        const responseText = await response.text();
-        let responseBody: unknown = responseText;
-        try {
-            responseBody = responseText.length > 0 ? JSON.parse(responseText) : null;
-        } catch {
-            responseBody = responseText;
-        }
-
-        return {
-            summary: response.ok ? "Scheduled meeting via external adapter." : `Meeting scheduling failed with status ${response.status}.`,
-            adapterSuccess: response.ok,
-            evidence: {
-                responseStatus: response.status,
-                responseBody,
-            },
-            ...(response.ok ? {} : { error: typeof responseBody === "string" ? responseBody.slice(0, 500) : undefined }),
-        };
-    }
-
-    private async executeGithubIssue(payload: ExecutionActionRecord): Promise<ActionExecutionResult> {
-        const token = process.env.GITHUB_TOKEN;
-        const repo = process.env.GITHUB_REPO;
-
-        if (!token || !repo || !repo.includes("/")) {
-            throw new Error("GitHub adapter is not configured. Set GITHUB_TOKEN and GITHUB_REPO=owner/repo.");
-        }
-
-        const title = typeof payload.parameters?.title === "string"
-            ? payload.parameters.title
-            : `Task: ${payload.taskId}`;
-        const body = typeof payload.parameters?.body === "string"
-            ? payload.parameters.body
-            : `Auto-created from task ${payload.taskId} in conversation ${payload.conversationId}.`;
-
-        const response = await fetch(`https://api.github.com/repos/${repo}/issues`, {
-            method: "POST",
-            headers: {
-                Accept: "application/vnd.github+json",
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-                "User-Agent": "chat-task-worker",
-            },
-            body: JSON.stringify({ title, body }),
-        });
-
-        const issue = (await response.json()) as { html_url?: string; number?: number; message?: string };
-
-        return {
-            summary: response.ok ? `Created GitHub issue #${issue.number ?? "?"}${issue.html_url ? ` (${issue.html_url})` : ""}` : `GitHub issue creation failed with status ${response.status}.`,
-            adapterSuccess: response.ok,
-            evidence: {
-                responseStatus: response.status,
-                issue,
-            },
-            ...(response.ok ? {} : { error: typeof issue.message === "string" ? issue.message : undefined }),
-        };
     }
 
     private getBackoffDelay(retryCount: number) {
