@@ -5,6 +5,7 @@ const taskPrioritySchema = z.enum(["low", "medium", "high", "urgent"]);
 
 export const CreateTaskSchema = z.object({
     conversationId: z.string().min(1),
+    parentTaskId: z.string().min(1).nullable().optional().default(null),
     title: z.string().min(3).max(200),
     description: z.string().max(8000).optional().default(""),
     assignees: z.array(z.string().min(1)).max(32).optional().default([]),
@@ -16,6 +17,8 @@ export const CreateTaskSchema = z.object({
     confidence: z.number().min(0).max(1).optional().default(1),
     tags: z.array(z.string().min(1).max(48)).optional().default([]),
     dedupeKey: z.string().min(1).max(160),
+    subTasks: z.array(z.string().min(1)).optional().default([]),
+    dependencyIds: z.array(z.string().min(1)).optional().default([]),
     createdBy: z.string().min(1),
 });
 
@@ -29,6 +32,9 @@ export const UpdateTaskSchema = z.object({
     dueAt: z.coerce.date().nullable().optional(),
     tags: z.array(z.string().min(1).max(48)).optional(),
     latestContextMessageId: z.string().min(1).nullable().optional(),
+    parentTaskId: z.string().min(1).nullable().optional(),
+    subTasks: z.array(z.string().min(1)).optional(),
+    dependencyIds: z.array(z.string().min(1)).optional(),
     result: z.object({
         success: z.boolean(),
         confidence: z.number().min(0).max(1),

@@ -47,6 +47,7 @@ export interface MessageTaskMetadata {
 export interface TaskRecord {
     _id: string;
     conversationId: string;
+    parentTaskId: string | null;
     title: string;
     description: string;
     status: TaskStatus;
@@ -60,6 +61,8 @@ export interface TaskRecord {
     confidence: number;
     tags: string[];
     dedupeKey: string;
+    subTasks: string[];
+    dependencyIds: string[];
     retryCount: number;
     maxRetries: number;
     result: TaskResult;

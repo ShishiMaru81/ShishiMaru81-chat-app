@@ -5,6 +5,7 @@ export function normalizeTask(doc: ITask): TaskRecord {
     return {
         _id: doc._id.toString(),
         conversationId: doc.conversationId.toString(),
+        parentTaskId: doc.parentTaskId ? doc.parentTaskId.toString() : null,
         title: doc.title,
         description: doc.description,
         status: doc.status,
@@ -20,6 +21,8 @@ export function normalizeTask(doc: ITask): TaskRecord {
         confidence: doc.confidence,
         tags: doc.tags,
         dedupeKey: doc.dedupeKey,
+        subTasks: (doc.subTasks ?? []).map((subTaskId) => subTaskId.toString()),
+        dependencyIds: (doc.dependencyIds ?? []).map((dependencyId) => dependencyId.toString()),
         retryCount: typeof doc.retryCount === "number" ? doc.retryCount : 0,
         maxRetries: typeof doc.maxRetries === "number" ? doc.maxRetries : 2,
         result: {

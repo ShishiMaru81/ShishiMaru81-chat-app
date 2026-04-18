@@ -9,6 +9,7 @@ export type TaskSource = "ai" | "manual" | "imported";
 export interface ITask {
     _id: mongoose.Types.ObjectId;
     conversationId: mongoose.Types.ObjectId;
+    parentTaskId?: mongoose.Types.ObjectId | null;
     title: string;
     description: string;
     status: TaskStatus;
@@ -22,6 +23,8 @@ export interface ITask {
     confidence: number;
     tags: string[];
     dedupeKey: string;
+    subTasks: mongoose.Types.ObjectId[];
+    dependencyIds: mongoose.Types.ObjectId[];
     retryCount: number;
     maxRetries: number;
     result: {
@@ -59,11 +62,14 @@ const TaskSchema = new Schema<ITask>(
         dueAt: { type: Date, default: null, index: true },
         createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
         source: { type: String, enum: ["ai", "manual", "imported"], required: true, index: true },
+        parentTaskId: { type: Schema.Types.ObjectId, ref: "Task", default: null, index: true },
         sourceMessageIds: [{ type: Schema.Types.ObjectId, ref: "Message" }],
         latestContextMessageId: { type: Schema.Types.ObjectId, ref: "Message", default: null },
         confidence: { type: Number, min: 0, max: 1, default: 1 },
         tags: [{ type: String, trim: true, maxlength: 48 }],
         dedupeKey: { type: String, required: true, maxlength: 160, unique: true },
+        subTasks: { type: [{ type: Schema.Types.ObjectId, ref: "Task" }], default: [] },
+        dependencyIds: { type: [{ type: Schema.Types.ObjectId, ref: "Task" }], default: [] },
         retryCount: { type: Number, min: 0, default: 0 },
         maxRetries: { type: Number, min: 0, default: 2 },
         result: {
@@ -98,6 +104,8 @@ TaskSchema.pre("save", function (next) {
 TaskSchema.index({ conversationId: 1, status: 1, updatedAt: -1 });
 TaskSchema.index({ conversationId: 1, dueAt: 1, status: 1 });
 TaskSchema.index({ assignees: 1, status: 1, dueAt: 1 });
+TaskSchema.index({ parentTaskId: 1, status: 1, updatedAt: -1 });
+TaskSchema.index({ parentTaskId: 1, dependencyIds: 1 });
 TaskSchema.index({ sourceMessageIds: 1 });
 TaskSchema.index({ updatedAt: -1 });
 

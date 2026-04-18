@@ -785,6 +785,7 @@ export async function processMessageTaskIntelligence(
 
     const task = await upsertTaskByDedupeKey({
         conversationId: input.conversationId,
+        parentTaskId: null,
         title,
         description: draft.description,
         assignees: [],
@@ -797,6 +798,8 @@ export async function processMessageTaskIntelligence(
         tags: [],
         dedupeKey,
         createdBy: input.senderId,
+        subTasks: [],
+        dependencyIds: [],
     });
 
     await linkMessageToTask({
@@ -923,6 +926,7 @@ export async function processMessageTaskIntelligence(
                 task: {
                     _id: task._id.toString(),
                     conversationId: task.conversationId.toString(),
+                    parentTaskId: task.parentTaskId ? task.parentTaskId.toString() : null,
                     title: task.title,
                     description: task.description,
                     status: task.status,
@@ -938,6 +942,8 @@ export async function processMessageTaskIntelligence(
                     confidence: task.confidence,
                     tags: task.tags,
                     dedupeKey: task.dedupeKey,
+                    subTasks: (task.subTasks ?? []).map((subTaskId) => subTaskId.toString()),
+                    dependencyIds: (task.dependencyIds ?? []).map((dependencyId) => dependencyId.toString()),
                     retryCount: typeof task.retryCount === "number" ? task.retryCount : 0,
                     maxRetries: typeof task.maxRetries === "number" ? task.maxRetries : 2,
                     result: {

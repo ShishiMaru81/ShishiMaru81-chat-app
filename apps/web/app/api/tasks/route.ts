@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
 
         const task = await createTask({
             conversationId: body.conversationId,
+            parentTaskId: null,
             title: body.title,
             description: body.description ?? "",
             assignees: body.assignees ?? [],
@@ -59,6 +60,8 @@ export async function POST(req: NextRequest) {
             tags: body.tags ?? [],
             dedupeKey,
             createdBy: guard.user.id,
+            subTasks: [],
+            dependencyIds: [],
         });
 
         const normalized = normalizeTask(task);

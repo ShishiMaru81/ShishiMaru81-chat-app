@@ -49,6 +49,7 @@ function buildPlaceholderTask(payload: TaskUpdatedPayload): TaskRecord {
     return {
         _id: payload.taskId,
         conversationId: payload.conversationId,
+        parentTaskId: typeof patch.parentTaskId === "string" || patch.parentTaskId === null ? patch.parentTaskId : null,
         title: typeof patch.title === "string" ? patch.title : "Task",
         description: typeof patch.description === "string" ? patch.description : "",
         status: (patch.status as TaskRecord["status"]) ?? "pending",
@@ -65,6 +66,8 @@ function buildPlaceholderTask(payload: TaskUpdatedPayload): TaskRecord {
         confidence: typeof patch.confidence === "number" ? patch.confidence : 0,
         tags: Array.isArray(patch.tags) ? patch.tags : [],
         dedupeKey: typeof patch.dedupeKey === "string" ? patch.dedupeKey : `${payload.conversationId}::${payload.taskId}`,
+        subTasks: Array.isArray(patch.subTasks) ? patch.subTasks : [],
+        dependencyIds: Array.isArray(patch.dependencyIds) ? patch.dependencyIds : [],
         retryCount: typeof patch.retryCount === "number" ? patch.retryCount : 0,
         maxRetries: typeof patch.maxRetries === "number" ? patch.maxRetries : 2,
         result: {

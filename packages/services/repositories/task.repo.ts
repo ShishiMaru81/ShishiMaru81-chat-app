@@ -26,6 +26,7 @@ export async function createTask(input: CreateTaskInput): Promise<ITask> {
 
     const task = new TaskModel({
         conversationId: toObjectId(input.conversationId),
+        parentTaskId: input.parentTaskId ? toObjectId(input.parentTaskId) : null,
         title: input.title,
         description: input.description ?? "",
         status: "pending",
@@ -39,6 +40,8 @@ export async function createTask(input: CreateTaskInput): Promise<ITask> {
         confidence: input.confidence ?? 1,
         tags: input.tags ?? [],
         dedupeKey: input.dedupeKey,
+        subTasks: input.subTasks?.map(toObjectId) ?? [],
+        dependencyIds: input.dependencyIds?.map(toObjectId) ?? [],
         retryCount: 0,
         maxRetries: 2,
         result: {
@@ -60,6 +63,7 @@ export async function upsertTaskByDedupeKey(input: CreateTaskInput): Promise<ITa
         {
             $setOnInsert: {
                 conversationId: toObjectId(input.conversationId),
+                parentTaskId: input.parentTaskId ? toObjectId(input.parentTaskId) : null,
                 title: input.title,
                 description: input.description ?? "",
                 status: "pending",
@@ -73,6 +77,8 @@ export async function upsertTaskByDedupeKey(input: CreateTaskInput): Promise<ITa
                 confidence: input.confidence ?? 1,
                 tags: input.tags ?? [],
                 dedupeKey: input.dedupeKey,
+                subTasks: input.subTasks?.map(toObjectId) ?? [],
+                dependencyIds: input.dependencyIds?.map(toObjectId) ?? [],
                 retryCount: 0,
                 maxRetries: 2,
                 result: {
@@ -105,6 +111,11 @@ export async function updateTask(update: UpdateTaskInput): Promise<ITask | null>
             ...(update.assignees !== undefined ? { assignees: update.assignees.map(toObjectId) } : {}),
             ...(update.dueAt !== undefined ? { dueAt: update.dueAt } : {}),
             ...(update.tags !== undefined ? { tags: update.tags } : {}),
+            ...(update.parentTaskId !== undefined
+                ? { parentTaskId: update.parentTaskId ? toObjectId(update.parentTaskId) : null }
+                : {}),
+            ...(update.subTasks !== undefined ? { subTasks: update.subTasks.map(toObjectId) } : {}),
+            ...(update.dependencyIds !== undefined ? { dependencyIds: update.dependencyIds.map(toObjectId) } : {}),
             ...(update.latestContextMessageId !== undefined
                 ? { latestContextMessageId: update.latestContextMessageId ? toObjectId(update.latestContextMessageId) : null }
                 : {}),

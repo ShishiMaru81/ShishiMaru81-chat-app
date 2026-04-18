@@ -1,5 +1,6 @@
 import type { TaskExecutionActionType, TaskResult, TaskUpdatedPayload } from "@chat/types";
 import { RetryManager } from "./retry-manager.js";
+import { TaskPlanner } from "../../../packages/services/task-planner.service";
 import * as taskRepo from "../../../packages/services/repositories/task.repo";
 import * as taskModule from "../../../packages/db/models/Task";
 
@@ -21,9 +22,12 @@ type ExecutionActionRecord = {
 type TaskDocumentLike = {
     _id: { toString(): string };
     conversationId: { toString(): string };
+    parentTaskId?: { toString(): string } | null;
     title: string;
     description: string;
     status: string;
+    subTasks?: Array<{ toString(): string }>;
+    dependencyIds?: Array<{ toString(): string }>;
     retryCount?: number;
     maxRetries?: number;
     result?: TaskResult;
@@ -51,6 +55,14 @@ type LoopContext = {
     maxRetries: number;
     attemptPayload: ExecutionActionRecord;
     observed: ActionExecutionResult | null;
+    verification: VerificationOutcome | null;
+};
+
+type RunTaskOutcome = {
+    completed: boolean;
+    retryCount: number;
+    maxRetries: number;
+    result: ActionExecutionResult | null;
     verification: VerificationOutcome | null;
 };
 
@@ -100,6 +112,7 @@ function resolveTaskModel(moduleNs: unknown): TaskModelLike {
 export class AgentRunner {
     private readonly retryManager: RetryManager;
     private readonly taskModel: TaskModelLike;
+    private readonly taskPlanner: TaskPlanner;
     private readonly internalBaseUrl: string;
 
     constructor(options?: {
@@ -109,13 +122,19 @@ export class AgentRunner {
     }) {
         this.retryManager = options?.retryManager ?? new RetryManager([1000, 2000, 5000]);
         this.taskModel = options?.taskModel ?? resolveTaskModel(taskModule);
+        this.taskPlanner = new TaskPlanner();
         this.internalBaseUrl = options?.internalBaseUrl ?? process.env.SOCKET_SERVER_URL ?? process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:3001";
     }
 
-    async runTask(taskId: string) {
+    async runTask(taskId: string): Promise<RunTaskOutcome> {
         const task = await this.taskModel.findById(taskId);
         if (!task) {
             throw new Error(`Task not found: ${taskId}`);
+        }
+
+        const plan = await this.taskPlanner.planTask(taskId);
+        if (plan.planned || (task.subTasks?.length ?? 0) > 0) {
+            return this.runPlannedTask(taskId);
         }
 
         const action = await taskRepo.getLatestExecutionTaskAction(taskId);
@@ -319,6 +338,134 @@ export class AgentRunner {
             result: context.observed,
             verification: context.verification,
         };
+    }
+
+    private async runPlannedTask(taskId: string): Promise<RunTaskOutcome> {
+        const rootTask = await this.taskModel.findById(taskId);
+        if (!rootTask) {
+            throw new Error(`Task not found: ${taskId}`);
+        }
+
+        const subTaskIds = await this.taskPlanner.getSubTasks(taskId);
+        console.log("agent-runner lifecycle:planned", {
+            taskId,
+            subTaskCount: subTaskIds.length,
+        });
+
+        await this.updateTask(rootTask, {
+            status: "executing",
+            retryCount: typeof rootTask.retryCount === "number" ? rootTask.retryCount : 0,
+            maxRetries: typeof rootTask.maxRetries === "number" ? rootTask.maxRetries : 2,
+        });
+
+        let anyChildSucceeded = false;
+
+        while (true) {
+            const nextExecutableTasks = await this.taskPlanner.getNextExecutableTasks(taskId);
+
+            if (nextExecutableTasks.length === 0) {
+                const allChildren = await this.taskPlanner.getSubTasks(taskId);
+                const allCompleted = allChildren.length > 0 && allChildren.every((child) => child.status === "completed");
+
+                if (allCompleted) {
+                    await this.updateTask(rootTask, {
+                        status: "completed",
+                        result: {
+                            success: true,
+                            confidence: 1,
+                            evidence: {
+                                parentTaskId: taskId,
+                                subTaskIds: allChildren.map((child) => child._id.toString()),
+                            },
+                        },
+                    });
+
+                    console.log("agent-runner lifecycle:parent-completed", {
+                        taskId,
+                        subTaskCount: allChildren.length,
+                    });
+
+                    return {
+                        completed: true,
+                        retryCount: typeof rootTask.retryCount === "number" ? rootTask.retryCount : 0,
+                        maxRetries: typeof rootTask.maxRetries === "number" ? rootTask.maxRetries : 2,
+                        result: null,
+                        verification: { success: true, confidence: 1 },
+                    };
+                }
+
+                const nextStatus = anyChildSucceeded ? "partial" : "failed";
+                await this.updateTask(rootTask, {
+                    status: nextStatus,
+                    result: {
+                        success: false,
+                        confidence: anyChildSucceeded ? 0.5 : 0,
+                        evidence: {
+                            parentTaskId: taskId,
+                            subTaskIds: allChildren.map((child) => ({
+                                taskId: child._id.toString(),
+                                status: child.status,
+                            })),
+                        },
+                        error: "Planned task chain did not complete successfully.",
+                    },
+                });
+
+                console.warn("agent-runner lifecycle:parent-incomplete", {
+                    taskId,
+                    nextStatus,
+                });
+
+                return {
+                    completed: false,
+                    retryCount: typeof rootTask.retryCount === "number" ? rootTask.retryCount : 0,
+                    maxRetries: typeof rootTask.maxRetries === "number" ? rootTask.maxRetries : 2,
+                    result: null,
+                    verification: { success: false, confidence: anyChildSucceeded ? 0.5 : 0 },
+                };
+            }
+
+            for (const readyTask of nextExecutableTasks) {
+                const childOutcome = await this.runTask(readyTask._id.toString());
+                anyChildSucceeded = anyChildSucceeded || Boolean(childOutcome.completed);
+
+                if (!childOutcome.completed) {
+                    const updatedChildren = await this.taskPlanner.getSubTasks(taskId);
+                    const nextStatus = anyChildSucceeded ? "partial" : "failed";
+
+                    await this.updateTask(rootTask, {
+                        status: nextStatus,
+                        result: {
+                            success: false,
+                            confidence: childOutcome.verification?.confidence ?? 0,
+                            evidence: {
+                                parentTaskId: taskId,
+                                failedSubTaskId: readyTask._id.toString(),
+                                subTaskStates: updatedChildren.map((child) => ({
+                                    taskId: child._id.toString(),
+                                    status: child.status,
+                                })),
+                            },
+                            error: "A subtask failed before the parent task completed.",
+                        },
+                    });
+
+                    console.log("agent-runner lifecycle:parent-stopped", {
+                        taskId,
+                        failedSubTaskId: readyTask._id.toString(),
+                        nextStatus,
+                    });
+
+                    return {
+                        completed: false,
+                        retryCount: typeof rootTask.retryCount === "number" ? rootTask.retryCount : 0,
+                        maxRetries: typeof rootTask.maxRetries === "number" ? rootTask.maxRetries : 2,
+                        result: null,
+                        verification: { success: false, confidence: childOutcome.verification?.confidence ?? 0 },
+                    };
+                }
+            }
+        }
     }
 
     private async execute(payload: ExecutionActionRecord): Promise<ActionExecutionResult> {
