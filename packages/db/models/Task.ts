@@ -22,6 +22,8 @@ export interface ITask {
     confidence: number;
     tags: string[];
     dedupeKey: string;
+    retryCount: number;
+    maxRetries: number;
     result: {
         success: boolean;
         confidence: number;
@@ -62,6 +64,8 @@ const TaskSchema = new Schema<ITask>(
         confidence: { type: Number, min: 0, max: 1, default: 1 },
         tags: [{ type: String, trim: true, maxlength: 48 }],
         dedupeKey: { type: String, required: true, maxlength: 160, unique: true },
+        retryCount: { type: Number, min: 0, default: 0 },
+        maxRetries: { type: Number, min: 0, default: 2 },
         result: {
             success: { type: Boolean, default: false },
             confidence: { type: Number, min: 0, max: 1, default: 0 },

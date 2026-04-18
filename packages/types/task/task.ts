@@ -60,6 +60,8 @@ export interface TaskRecord {
     confidence: number;
     tags: string[];
     dedupeKey: string;
+    retryCount: number;
+    maxRetries: number;
     result: TaskResult;
     version: number;
     closedAt: string | null;

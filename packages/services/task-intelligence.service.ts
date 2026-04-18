@@ -938,6 +938,8 @@ export async function processMessageTaskIntelligence(
                     confidence: task.confidence,
                     tags: task.tags,
                     dedupeKey: task.dedupeKey,
+                    retryCount: typeof task.retryCount === "number" ? task.retryCount : 0,
+                    maxRetries: typeof task.maxRetries === "number" ? task.maxRetries : 2,
                     result: {
                         success: Boolean(task.result?.success),
                         confidence: typeof task.result?.confidence === "number" ? task.result.confidence : 0,

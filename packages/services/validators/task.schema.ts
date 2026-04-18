@@ -35,6 +35,8 @@ export const UpdateTaskSchema = z.object({
         evidence: z.unknown(),
         error: z.string().max(4000).optional(),
     }).optional(),
+    retryCount: z.number().int().min(0).optional(),
+    maxRetries: z.number().int().min(0).optional(),
     updatedBy: z.string().min(1).nullable().optional(),
 });
 

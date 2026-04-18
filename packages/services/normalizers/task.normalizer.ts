@@ -20,6 +20,8 @@ export function normalizeTask(doc: ITask): TaskRecord {
         confidence: doc.confidence,
         tags: doc.tags,
         dedupeKey: doc.dedupeKey,
+        retryCount: typeof doc.retryCount === "number" ? doc.retryCount : 0,
+        maxRetries: typeof doc.maxRetries === "number" ? doc.maxRetries : 2,
         result: {
             success: Boolean(doc.result?.success),
             confidence: typeof doc.result?.confidence === "number" ? doc.result.confidence : 0,

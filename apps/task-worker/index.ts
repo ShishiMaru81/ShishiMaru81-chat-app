@@ -8,6 +8,7 @@ import type { TaskExecutionActionType, TaskExecutionUpdatedPayload, TaskResult, 
 import * as outboxModule from "../../packages/services/outbox.service";
 import * as intelligenceModule from "../../packages/services/task-intelligence.service";
 import * as taskModule from "../../packages/db/models/Task";
+import { RetryManager } from "./services/retry-manager.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const visitedEnvPaths = new Set<string>();
@@ -44,6 +45,7 @@ const redis = redisUrl
 
 const internalBaseUrl = process.env.SOCKET_SERVER_URL || process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001";
 const INTERNAL_SECRET_HEADER = "x-internal-secret";
+const retryManager = new RetryManager([1000, 2000, 5000]);
 
 const outboxApi = ((outboxModule as unknown as { default?: unknown }).default || outboxModule) as {
     claimOutboxEvents?: (workerId: string, limit?: number) => Promise<Array<{
@@ -82,6 +84,8 @@ type TaskModelLike = {
         _id: { toString(): string };
         version: number;
         status: string;
+        retryCount?: number;
+        maxRetries?: number;
         result?: TaskResult;
         updatedBy: null | string;
         save: () => Promise<void>;
@@ -158,6 +162,10 @@ type ExecutionContext = {
     payload: NormalizedTaskExecutionRequestedPayload;
     currentTask: {
         status: string;
+    } | null;
+    executionPolicy: {
+        retryCount: number;
+        maxRetries: number;
     } | null;
     result: ActionExecutionResult | null;
     verification: VerificationOutcome | null;
@@ -283,14 +291,21 @@ async function updateTaskLifecycle(input: {
     conversationId: string;
     status: "pending" | "executing" | "completed" | "failed" | "partial";
     result?: TaskResult;
+    retryCount?: number;
+    maxRetries?: number;
 }) {
-    const { taskId, conversationId, status, result } = input;
+    const { taskId, conversationId, status, result, retryCount, maxRetries } = input;
     const task = await TaskModel.findById(taskId);
     if (!task) {
         throw new Error(`Task not found: ${taskId}`);
     }
 
-    if (task.status === status && (result === undefined || JSON.stringify(task.result ?? null) === JSON.stringify(result))) {
+    if (
+        task.status === status
+        && (result === undefined || JSON.stringify(task.result ?? null) === JSON.stringify(result))
+        && (retryCount === undefined || task.retryCount === retryCount)
+        && (maxRetries === undefined || task.maxRetries === maxRetries)
+    ) {
         return task;
     }
 
@@ -298,6 +313,12 @@ async function updateTaskLifecycle(input: {
     task.status = status;
     if (result !== undefined) {
         task.result = result;
+    }
+    if (typeof retryCount === "number") {
+        task.retryCount = retryCount;
+    }
+    if (typeof maxRetries === "number") {
+        task.maxRetries = maxRetries;
     }
     task.updatedBy = null;
     await task.save();
@@ -308,6 +329,8 @@ async function updateTaskLifecycle(input: {
         patch: {
             status,
             ...(result !== undefined ? { result } : {}),
+            ...(typeof retryCount === "number" ? { retryCount } : {}),
+            ...(typeof maxRetries === "number" ? { maxRetries } : {}),
             updatedBy: null,
         },
         previousVersion,
@@ -325,6 +348,95 @@ function asRecord(value: unknown): Record<string, unknown> {
         return value as Record<string, unknown>;
     }
     return {};
+}
+
+function stableStringify(value: unknown): string {
+    if (value === null || value === undefined) return String(value);
+    if (typeof value !== "object") return JSON.stringify(value);
+    if (Array.isArray(value)) {
+        return `[${value.map((entry) => stableStringify(entry)).join(",")}]`;
+    }
+
+    const objectValue = value as Record<string, unknown>;
+    const keys = Object.keys(objectValue).sort();
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(objectValue[key])}`).join(",")}}`;
+}
+
+function buildActionIdempotencyKey(payload: TaskExecutionRequestedPayload) {
+    const parameterFingerprint = stableStringify(payload.parameters ?? {});
+    return `task-action:${payload.taskId}:${payload.actionType}:${parameterFingerprint}`;
+}
+
+function getFallbackAdapterName(actionType: TaskExecutionActionType): string | null {
+    if (actionType === "schedule_meeting" && process.env.SCHEDULE_MEETING_FALLBACK_WEBHOOK_URL) {
+        return "schedule_meeting_fallback_webhook";
+    }
+
+    if (actionType === "send_email" && process.env.SEND_EMAIL_FALLBACK_WEBHOOK_URL) {
+        return "send_email_fallback_webhook";
+    }
+
+    if (actionType === "create_github_issue" && process.env.GITHUB_ISSUE_FALLBACK_WEBHOOK_URL) {
+        return "create_github_issue_fallback_webhook";
+    }
+
+    return null;
+}
+
+async function withIdempotencyGuard(
+    payload: TaskExecutionRequestedPayload,
+    operation: () => Promise<ActionExecutionResult>
+): Promise<ActionExecutionResult> {
+    const idempotencyKey = buildActionIdempotencyKey(payload);
+    const doneKey = `task-worker:idempotent:done:${idempotencyKey}`;
+    const lockKey = `task-worker:idempotent:lock:${idempotencyKey}`;
+
+    if (!redis) {
+        return operation();
+    }
+
+    const cached = await redis.get(doneKey);
+    if (cached) {
+        try {
+            return JSON.parse(cached) as ActionExecutionResult;
+        } catch {
+            // Ignore malformed cache and continue with fresh execution.
+        }
+    }
+
+    const lockAcquired = await redis.set(lockKey, WORKER_ID, "EX", 60, "NX");
+    if (!lockAcquired) {
+        for (let index = 0; index < 5; index += 1) {
+            await wait(200);
+            const replay = await redis.get(doneKey);
+            if (!replay) continue;
+
+            try {
+                return JSON.parse(replay) as ActionExecutionResult;
+            } catch {
+                break;
+            }
+        }
+
+        return {
+            summary: "Skipped duplicate external action while idempotency lock was active.",
+            adapterSuccess: true,
+            evidence: {
+                idempotencyKey,
+                duplicateSkipped: true,
+            },
+        };
+    }
+
+    try {
+        const result = await operation();
+        if (result.adapterSuccess) {
+            await redis.set(doneKey, JSON.stringify(result), "EX", 7 * 24 * 60 * 60);
+        }
+        return result;
+    } finally {
+        await redis.del(lockKey);
+    }
 }
 
 function verifyEmailSent(result: ActionExecutionResult): VerificationOutcome {
@@ -588,6 +700,221 @@ async function executeActionAdapter(payload: TaskExecutionRequestedPayload): Pro
     }
 }
 
+async function executeScheduleMeetingFallbackAction(payload: TaskExecutionRequestedPayload): Promise<ActionExecutionResult> {
+    const webhookUrl = process.env.SCHEDULE_MEETING_FALLBACK_WEBHOOK_URL;
+    if (!webhookUrl) {
+        return {
+            summary: "No fallback adapter configured for meeting scheduling.",
+            adapterSuccess: false,
+            evidence: {
+                adapter: "schedule_meeting_fallback_webhook",
+                configured: false,
+            },
+            error: "SCHEDULE_MEETING_FALLBACK_WEBHOOK_URL is not set.",
+        };
+    }
+
+    const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            taskId: payload.taskId,
+            conversationId: payload.conversationId,
+            triggerMessageId: payload.triggerMessageId,
+            parameters: payload.parameters ?? {},
+        }),
+    });
+
+    const responseText = await response.text();
+    let responseBody: unknown = responseText;
+    try {
+        responseBody = responseText.length > 0 ? JSON.parse(responseText) : null;
+    } catch {
+        responseBody = responseText;
+    }
+
+    return {
+        summary: response.ok ? "Scheduled meeting via fallback adapter." : `Fallback meeting scheduling failed (${response.status}).`,
+        adapterSuccess: response.ok,
+        evidence: {
+            adapter: "schedule_meeting_fallback_webhook",
+            responseStatus: response.status,
+            responseBody,
+        },
+        ...(response.ok ? {} : { error: typeof responseBody === "string" ? responseBody.slice(0, 500) : "Fallback adapter failure." }),
+    };
+}
+
+async function executeSendEmailFallbackAction(payload: TaskExecutionRequestedPayload): Promise<ActionExecutionResult> {
+    const webhookUrl = process.env.SEND_EMAIL_FALLBACK_WEBHOOK_URL;
+    if (!webhookUrl) {
+        return {
+            summary: "No fallback adapter configured for send_email.",
+            adapterSuccess: false,
+            evidence: {
+                adapter: "send_email_fallback_webhook",
+                configured: false,
+            },
+            error: "SEND_EMAIL_FALLBACK_WEBHOOK_URL is not set.",
+        };
+    }
+
+    const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            taskId: payload.taskId,
+            conversationId: payload.conversationId,
+            triggerMessageId: payload.triggerMessageId,
+            parameters: payload.parameters ?? {},
+        }),
+    });
+
+    const responseText = await response.text();
+    let responseBody: unknown = responseText;
+    try {
+        responseBody = responseText.length > 0 ? JSON.parse(responseText) : null;
+    } catch {
+        responseBody = responseText;
+    }
+
+    return {
+        summary: response.ok ? "Sent email via fallback adapter." : `Fallback email sending failed (${response.status}).`,
+        adapterSuccess: response.ok,
+        evidence: {
+            adapter: "send_email_fallback_webhook",
+            responseStatus: response.status,
+            responseBody,
+        },
+        ...(response.ok ? {} : { error: typeof responseBody === "string" ? responseBody.slice(0, 500) : "Fallback adapter failure." }),
+    };
+}
+
+async function executeGithubIssueFallbackAction(payload: TaskExecutionRequestedPayload): Promise<ActionExecutionResult> {
+    const webhookUrl = process.env.GITHUB_ISSUE_FALLBACK_WEBHOOK_URL;
+    if (!webhookUrl) {
+        return {
+            summary: "No fallback adapter configured for create_github_issue.",
+            adapterSuccess: false,
+            evidence: {
+                adapter: "create_github_issue_fallback_webhook",
+                configured: false,
+            },
+            error: "GITHUB_ISSUE_FALLBACK_WEBHOOK_URL is not set.",
+        };
+    }
+
+    const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            taskId: payload.taskId,
+            conversationId: payload.conversationId,
+            triggerMessageId: payload.triggerMessageId,
+            parameters: payload.parameters ?? {},
+        }),
+    });
+
+    const responseText = await response.text();
+    let responseBody: unknown = responseText;
+    try {
+        responseBody = responseText.length > 0 ? JSON.parse(responseText) : null;
+    } catch {
+        responseBody = responseText;
+    }
+
+    return {
+        summary: response.ok ? "Created GitHub issue via fallback adapter." : `Fallback GitHub issue creation failed (${response.status}).`,
+        adapterSuccess: response.ok,
+        evidence: {
+            adapter: "create_github_issue_fallback_webhook",
+            responseStatus: response.status,
+            responseBody,
+        },
+        ...(response.ok ? {} : { error: typeof responseBody === "string" ? responseBody.slice(0, 500) : "Fallback adapter failure." }),
+    };
+}
+
+async function executeFallbackAdapter(payload: TaskExecutionRequestedPayload): Promise<ActionExecutionResult> {
+    switch (payload.actionType) {
+        case "schedule_meeting":
+            return executeScheduleMeetingFallbackAction(payload);
+        case "send_email":
+            return executeSendEmailFallbackAction(payload);
+        case "create_github_issue":
+            return executeGithubIssueFallbackAction(payload);
+        case "none":
+        default:
+            return {
+                summary: "No fallback adapter for action type.",
+                adapterSuccess: false,
+                evidence: {
+                    actionType: payload.actionType,
+                },
+                error: "Fallback adapter unavailable.",
+            };
+    }
+}
+
+async function executeActionWithFallback(payload: TaskExecutionRequestedPayload): Promise<ActionExecutionResult> {
+    const primary = await executeActionAdapter(payload);
+    if (primary.adapterSuccess) {
+        return {
+            ...primary,
+            evidence: {
+                primary: primary.evidence,
+                fallbackUsed: false,
+            },
+        };
+    }
+
+    const fallbackAdapter = getFallbackAdapterName(payload.actionType);
+    if (!fallbackAdapter) {
+        return {
+            summary: primary.summary,
+            adapterSuccess: false,
+            evidence: {
+                primary: primary.evidence,
+                fallbackUsed: false,
+                fallbackConfigured: false,
+            },
+            error: primary.error ?? "Primary adapter failed.",
+        };
+    }
+
+    const fallback = await executeFallbackAdapter(payload);
+    if (fallback.adapterSuccess) {
+        return {
+            summary: `${primary.summary} Recovered via fallback adapter ${fallbackAdapter}.`,
+            adapterSuccess: true,
+            evidence: {
+                primary: primary.evidence,
+                fallback: fallback.evidence,
+                fallbackUsed: true,
+                fallbackAdapter,
+            },
+        };
+    }
+
+    return {
+        summary: `${primary.summary} Fallback adapter ${fallbackAdapter} also failed.`,
+        adapterSuccess: false,
+        evidence: {
+            primary: primary.evidence,
+            fallback: fallback.evidence,
+            fallbackUsed: true,
+            fallbackAdapter,
+        },
+        error: fallback.error ?? primary.error ?? "Primary and fallback adapters failed.",
+    };
+}
+
 function buildExecutionPlan(payload: NormalizedTaskExecutionRequestedPayload): ExecutionPlan {
     return {
         steps: [
@@ -613,11 +940,18 @@ function buildExecutionPlan(payload: NormalizedTaskExecutionRequestedPayload): E
                         status: currentTask.status,
                     };
 
+                    context.executionPolicy = {
+                        retryCount: typeof currentTask.retryCount === "number" ? currentTask.retryCount : 0,
+                        maxRetries: typeof currentTask.maxRetries === "number" ? currentTask.maxRetries : 2,
+                    };
+
                     if (currentTask.status === "pending") {
                         await updateTaskLifecycle({
                             taskId: payload.taskId,
                             conversationId: payload.conversationId,
                             status: "executing",
+                            retryCount: context.executionPolicy.retryCount,
+                            maxRetries: context.executionPolicy.maxRetries,
                         });
                         context.currentTask.status = "executing";
                     }
@@ -626,10 +960,57 @@ function buildExecutionPlan(payload: NormalizedTaskExecutionRequestedPayload): E
             {
                 name: "execute-action-adapter",
                 phase: "act",
-                retryable: true,
-                maxAttempts: 2,
                 run: async (context) => {
-                    context.result = await executeActionAdapter(payload);
+                    const retryCount = context.executionPolicy?.retryCount ?? 0;
+                    const maxRetries = context.executionPolicy?.maxRetries ?? 2;
+
+                    context.result = await retryManager.execute<ActionExecutionResult>({
+                        retryCount,
+                        maxRetries,
+                        operation: async () => {
+                            const result = await withIdempotencyGuard(payload, async () => executeActionWithFallback(payload));
+
+                            if (!result.adapterSuccess) {
+                                throw new Error(result.error ?? result.summary ?? "External adapter failed");
+                            }
+
+                            return result;
+                        },
+                        getReason: (error) => (error instanceof Error ? error.message : "unknown adapter error"),
+                        onRetry: async ({ retryCount: nextRetryCount, maxRetries: limit, reason, delayMs }) => {
+                            context.executionPolicy = {
+                                retryCount: nextRetryCount,
+                                maxRetries: limit,
+                            };
+
+                            console.warn("task execution retry attempt", {
+                                taskId: payload.taskId,
+                                actionType: payload.actionType,
+                                retryCount: nextRetryCount,
+                                maxRetries: limit,
+                                delayMs,
+                                reason,
+                            });
+
+                            await updateTaskLifecycle({
+                                taskId: payload.taskId,
+                                conversationId: payload.conversationId,
+                                status: "executing",
+                                retryCount: nextRetryCount,
+                                maxRetries: limit,
+                            });
+
+                            await emitTaskExecutionUpdate({
+                                taskId: payload.taskId,
+                                conversationId: payload.conversationId,
+                                state: "running",
+                                actionType: payload.actionType,
+                                summary: `retry ${nextRetryCount}/${limit} in ${delayMs}ms: ${reason}`,
+                                error: null,
+                                updatedAt: new Date().toISOString(),
+                            });
+                        },
+                    });
                 },
             },
             {
@@ -699,6 +1080,7 @@ async function runExecutionPlan(payload: NormalizedTaskExecutionRequestedPayload
     const context: ExecutionContext = {
         payload,
         currentTask: null,
+        executionPolicy: null,
         result: null,
         verification: null,
     };

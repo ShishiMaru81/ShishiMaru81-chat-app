@@ -65,6 +65,8 @@ function buildPlaceholderTask(payload: TaskUpdatedPayload): TaskRecord {
         confidence: typeof patch.confidence === "number" ? patch.confidence : 0,
         tags: Array.isArray(patch.tags) ? patch.tags : [],
         dedupeKey: typeof patch.dedupeKey === "string" ? patch.dedupeKey : `${payload.conversationId}::${payload.taskId}`,
+        retryCount: typeof patch.retryCount === "number" ? patch.retryCount : 0,
+        maxRetries: typeof patch.maxRetries === "number" ? patch.maxRetries : 2,
         result: {
             success: Boolean((patch.result as TaskRecord["result"] | undefined)?.success),
             confidence: typeof (patch.result as TaskRecord["result"] | undefined)?.confidence === "number"

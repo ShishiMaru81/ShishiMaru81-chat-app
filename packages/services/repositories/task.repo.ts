@@ -39,6 +39,8 @@ export async function createTask(input: CreateTaskInput): Promise<ITask> {
         confidence: input.confidence ?? 1,
         tags: input.tags ?? [],
         dedupeKey: input.dedupeKey,
+        retryCount: 0,
+        maxRetries: 2,
         result: {
             success: false,
             confidence: 0,
@@ -71,6 +73,8 @@ export async function upsertTaskByDedupeKey(input: CreateTaskInput): Promise<ITa
                 confidence: input.confidence ?? 1,
                 tags: input.tags ?? [],
                 dedupeKey: input.dedupeKey,
+                retryCount: 0,
+                maxRetries: 2,
                 result: {
                     success: false,
                     confidence: 0,
@@ -105,6 +109,8 @@ export async function updateTask(update: UpdateTaskInput): Promise<ITask | null>
                 ? { latestContextMessageId: update.latestContextMessageId ? toObjectId(update.latestContextMessageId) : null }
                 : {}),
             ...(update.result !== undefined ? { result: update.result } : {}),
+            ...(update.retryCount !== undefined ? { retryCount: update.retryCount } : {}),
+            ...(update.maxRetries !== undefined ? { maxRetries: update.maxRetries } : {}),
             ...(update.updatedBy !== undefined
                 ? { updatedBy: update.updatedBy ? toObjectId(update.updatedBy) : null }
                 : {}),
