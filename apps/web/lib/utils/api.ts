@@ -38,6 +38,30 @@ export type AdminAuthEventsResponse = {
     };
 };
 
+export type TaskApprovalRecord = {
+    _id: string;
+    taskId: string;
+    conversationId: string;
+    actorType: "user" | "agent" | "system";
+    actorId: string | null;
+    actionType: string;
+    messageId: string | null;
+    executionState: string | null;
+    summary: string | null;
+    error: string | null;
+    patch: {
+        before: unknown | null;
+        after: unknown | null;
+    };
+    reason: string;
+    idempotencyKey: string;
+    createdAt: string;
+};
+
+export type TaskApprovalsResponse = {
+    approvals: TaskApprovalRecord[];
+};
+
 function wait(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -189,4 +213,20 @@ export async function getAdminAuthEvents(params?: {
     );
 
     return data.data;
+}
+
+export async function getTaskApprovals(conversationId?: string): Promise<TaskApprovalsResponse> {
+    const query = conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : "";
+    return request<TaskApprovalsResponse>(`/api/task-approvals${query}`);
+}
+
+export async function decideTaskApproval(input: {
+    taskActionId: string;
+    decision: "approve" | "reject";
+    reason?: string;
+}): Promise<{ approval: TaskApprovalRecord | null }> {
+    return request<{ approval: TaskApprovalRecord | null }>("/api/task-approvals", {
+        method: "POST",
+        body: JSON.stringify(input),
+    });
 }

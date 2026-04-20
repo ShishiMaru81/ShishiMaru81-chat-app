@@ -223,6 +223,8 @@ const useTaskStore = create<TaskStore>((set, get) => ({
                                 ? "completed"
                                 : payload.state === "failed"
                                     ? "failed"
+                                    : payload.state === "blocked" || payload.state === "approval_pending"
+                                        ? "partial"
                                 : state.tasksById[payload.taskId].status,
                         updatedAt: typeof payload.updatedAt === "string"
                             ? payload.updatedAt

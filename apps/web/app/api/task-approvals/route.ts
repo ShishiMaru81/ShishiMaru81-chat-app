@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { enqueueOutboxEvent } from "@chat/services/outbox.service";
 import { getPendingApprovalTaskActions, getTaskActionById, updateTaskActionExecutionState } from "@chat/services/repositories/task.repo";
-import { requireAuthUser } from "@/lib/utils/auth/requireAuthUser";
+import { requireAdminUser } from "@/lib/utils/auth/requireAdminUser";
 
 const decisionSchema = z.object({
     taskActionId: z.string().min(1),
@@ -30,7 +30,7 @@ function serializeTaskAction(action: Awaited<ReturnType<typeof getPendingApprova
 }
 
 export async function GET(req: NextRequest) {
-    const guard = await requireAuthUser();
+    const guard = await requireAdminUser();
     if (guard.response) return guard.response;
 
     const { searchParams } = new URL(req.url);
@@ -41,14 +41,23 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-    const guard = await requireAuthUser();
+    const guard = await requireAdminUser();
     if (guard.response) return guard.response;
 
-    const body = decisionSchema.parse(await req.json());
+    const parse = decisionSchema.safeParse(await req.json());
+    if (!parse.success) {
+        return NextResponse.json({ error: "Invalid approval decision payload" }, { status: 400 });
+    }
+
+    const body = parse.data;
     const action = await getTaskActionById(body.taskActionId);
 
     if (!action) {
         return NextResponse.json({ error: "Approval request not found" }, { status: 404 });
+    }
+
+    if (action.executionState !== "approval_pending") {
+        return NextResponse.json({ error: `Approval request is not pending (state=${action.executionState ?? "null"})` }, { status: 409 });
     }
 
     if (body.decision === "reject") {

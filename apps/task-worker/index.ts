@@ -11,6 +11,7 @@ import * as taskRepo from "@chat/services/repositories/task.repo";
 import * as taskModule from "@chat/db/models/Task";
 import { RetryManager } from "./services/retry-manager.js";
 import AgentRunner from "./services/agent-runner.js";
+import { evaluateExecutionPolicy } from "./services/execution-policy.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const visitedEnvPaths = new Set<string>();
@@ -1154,33 +1155,72 @@ async function processTaskExecutionRequested(payload: NormalizedTaskExecutionReq
     });
 
     const confidence = payload.confidence ?? 0.5;
-    const requiresApproval = Boolean(payload.needsApproval) || confidence < 0.7;
+    const policyDecision = evaluateExecutionPolicy(payload);
+    const requiresApproval = policyDecision.outcome === "approval_required";
 
-    if (requiresApproval) {
-        await taskRepo.createTaskAction({
+    if (policyDecision.outcome === "blocked") {
+        const blockedReason = policyDecision.reasons.join(" ") || "Execution blocked by policy.";
+
+        await updateTaskLifecycle({
             taskId: payload.taskId,
             conversationId: payload.conversationId,
-            actorType: payload.requestedByType,
-            actorId: payload.requestedById,
-            actionType: payload.actionType,
-            messageId: payload.triggerMessageId,
-            parameters: payload.parameters,
-            executionState: "approval_pending",
-            summary: actionSummary,
-            error: null,
-            patch: {
-                before: null,
-                after: {
-                    actionType: payload.actionType,
-                    parameters: payload.parameters,
-                    confidence,
-                    needsApproval: true,
-                    status: "approval_pending",
+            status: "failed",
+            result: {
+                success: false,
+                confidence: clampConfidence(confidence),
+                evidence: {
+                    reason: "policy_blocked",
+                    policyDecision,
                 },
+                error: blockedReason,
             },
-            reason: "Action requires human approval before execution.",
-            idempotencyKey: `${payload.taskId}:${payload.actionType}:${payload.triggerMessageId}:approval_pending`,
         });
+
+        await emitTaskExecutionUpdate({
+            taskId: payload.taskId,
+            conversationId: payload.conversationId,
+            state: "blocked",
+            actionType: payload.actionType,
+            summary: "Execution blocked by policy.",
+            error: blockedReason,
+            updatedAt: new Date().toISOString(),
+        });
+        return;
+    }
+
+    if (requiresApproval) {
+        try {
+            await taskRepo.createTaskAction({
+                taskId: payload.taskId,
+                conversationId: payload.conversationId,
+                actorType: payload.requestedByType,
+                actorId: payload.requestedById,
+                actionType: payload.actionType,
+                messageId: payload.triggerMessageId,
+                parameters: payload.parameters,
+                executionState: "approval_pending",
+                summary: actionSummary,
+                error: null,
+                patch: {
+                    before: null,
+                    after: {
+                        actionType: payload.actionType,
+                        parameters: payload.parameters,
+                        confidence,
+                        needsApproval: true,
+                        status: "approval_pending",
+                        policyDecision,
+                    },
+                },
+                reason: `Action requires human approval before execution. ${policyDecision.reasons.join(" ")}`,
+                idempotencyKey: `${payload.taskId}:${payload.actionType}:${payload.triggerMessageId}:approval_pending`,
+            });
+        } catch (error) {
+            const maybeMongoError = error as { code?: number };
+            if (maybeMongoError?.code !== 11000) {
+                throw error;
+            }
+        }
 
         await updateTaskLifecycle({
             taskId: payload.taskId,
@@ -1192,6 +1232,7 @@ async function processTaskExecutionRequested(payload: NormalizedTaskExecutionReq
                 evidence: {
                     reason: "approval_required",
                     requestedConfidence: confidence,
+                    policyDecision,
                 },
                 error: "Approval required before executing this action.",
             },
@@ -1199,10 +1240,10 @@ async function processTaskExecutionRequested(payload: NormalizedTaskExecutionReq
         await emitTaskExecutionUpdate({
             taskId: payload.taskId,
             conversationId: payload.conversationId,
-            state: "blocked",
+            state: "approval_pending",
             actionType: payload.actionType,
             summary: "Awaiting human approval before execution.",
-            error: "Approval required before executing this action.",
+            error: policyDecision.reasons.join(" ") || "Approval required before executing this action.",
             updatedAt: new Date().toISOString(),
         });
         return;
