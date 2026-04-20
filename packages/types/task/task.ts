@@ -119,6 +119,9 @@ export interface TaskActionRecord {
     actorId: string | null;
     actionType: TaskActionType;
     messageId: string | null;
+    executionState: "requested" | "approval_pending" | "approved" | "rejected" | "queued" | "running" | "succeeded" | "failed" | "blocked" | "expired" | null;
+    summary: string | null;
+    error: string | null;
     patch: {
         before: unknown | null;
         after: unknown | null;

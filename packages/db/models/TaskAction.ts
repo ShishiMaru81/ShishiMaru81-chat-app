@@ -16,6 +16,7 @@ export type TaskActionType =
     | "none";
 
 export type TaskActorType = "user" | "agent" | "system";
+export type TaskActionExecutionState = "requested" | "approval_pending" | "approved" | "rejected" | "queued" | "running" | "succeeded" | "failed" | "blocked" | "expired" | null;
 
 export interface ITaskAction {
     _id: mongoose.Types.ObjectId;
@@ -26,7 +27,7 @@ export interface ITaskAction {
     actionType: TaskActionType;
     messageId?: mongoose.Types.ObjectId | null;
     parameters?: Record<string, unknown>;
-    executionState?: "requested" | "queued" | "running" | "succeeded" | "failed" | "blocked" | null;
+    executionState?: TaskActionExecutionState;
     summary?: string | null;
     error?: string | null;
     patch: {
@@ -68,7 +69,7 @@ const TaskActionSchema = new Schema<ITaskAction>(
         parameters: { type: Schema.Types.Mixed, default: {} },
         executionState: {
             type: String,
-            enum: ["requested", "queued", "running", "succeeded", "failed", "blocked"],
+            enum: ["requested", "approval_pending", "approved", "rejected", "queued", "running", "succeeded", "failed", "blocked", "expired"],
             default: null,
             index: true,
         },

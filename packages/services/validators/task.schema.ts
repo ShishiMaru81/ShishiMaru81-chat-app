@@ -122,7 +122,7 @@ export const CreateTaskActionSchema = z.object({
     ]),
     messageId: z.string().min(1).nullable().optional().default(null),
     parameters: z.record(z.string(), z.unknown()).optional(),
-    executionState: z.enum(["requested", "queued", "running", "succeeded", "failed", "blocked"]).nullable().optional(),
+    executionState: z.enum(["requested", "approval_pending", "approved", "rejected", "queued", "running", "succeeded", "failed", "blocked", "expired"]).nullable().optional(),
     summary: z.string().max(2000).nullable().optional(),
     error: z.string().max(4000).nullable().optional(),
     patch: z.object({

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import type { TaskExecutionActionType, TaskExecutionUpdatedPayload, TaskResult, TaskUpdatedPayload } from "@chat/types";
 import * as outboxModule from "@chat/services/outbox.service";
 import * as intelligenceModule from "@chat/services/task-intelligence.service";
+import * as taskRepo from "@chat/services/repositories/task.repo";
 import * as taskModule from "@chat/db/models/Task";
 import { RetryManager } from "./services/retry-manager.js";
 import AgentRunner from "./services/agent-runner.js";
@@ -142,6 +143,15 @@ type TaskExecutionRequestedPayload = {
     needsApproval?: boolean;
 };
 
+type TaskExecutionApprovedPayload = {
+    taskId: string;
+    conversationId: string;
+    taskActionId: string;
+    approvedByType?: "user" | "agent" | "system";
+    approvedById?: string | null;
+    reason?: string;
+};
+
 type NormalizedTaskExecutionRequestedPayload = Omit<TaskExecutionRequestedPayload, "actionType"> & {
     actionType: TaskExecutionActionType;
 };
@@ -208,6 +218,14 @@ function isTaskExecutionRequestedPayload(payload: Record<string, unknown>): payl
         && (typeof payload.triggerMessageId === "string" || typeof payload.triggerMessageId === "undefined")
         && (typeof payload.requestedByType === "string" || typeof payload.requestedByType === "undefined")
         && (typeof payload.actionType === "string" || typeof payload.actionType === "undefined")
+    );
+}
+
+function isTaskExecutionApprovedPayload(payload: Record<string, unknown>): payload is TaskExecutionApprovedPayload {
+    return (
+        typeof payload.taskId === "string"
+        && typeof payload.conversationId === "string"
+        && typeof payload.taskActionId === "string"
     );
 }
 
@@ -1123,6 +1141,7 @@ async function runExecutionPlan(payload: NormalizedTaskExecutionRequestedPayload
 
 async function processTaskExecutionRequested(payload: NormalizedTaskExecutionRequestedPayload) {
     const queuedAt = new Date().toISOString();
+    const actionSummary = `${payload.actionType} requested for task ${payload.taskId}`;
 
     await emitTaskExecutionUpdate({
         taskId: payload.taskId,
@@ -1138,6 +1157,31 @@ async function processTaskExecutionRequested(payload: NormalizedTaskExecutionReq
     const requiresApproval = Boolean(payload.needsApproval) || confidence < 0.7;
 
     if (requiresApproval) {
+        await taskRepo.createTaskAction({
+            taskId: payload.taskId,
+            conversationId: payload.conversationId,
+            actorType: payload.requestedByType,
+            actorId: payload.requestedById,
+            actionType: payload.actionType,
+            messageId: payload.triggerMessageId,
+            parameters: payload.parameters,
+            executionState: "approval_pending",
+            summary: actionSummary,
+            error: null,
+            patch: {
+                before: null,
+                after: {
+                    actionType: payload.actionType,
+                    parameters: payload.parameters,
+                    confidence,
+                    needsApproval: true,
+                    status: "approval_pending",
+                },
+            },
+            reason: "Action requires human approval before execution.",
+            idempotencyKey: `${payload.taskId}:${payload.actionType}:${payload.triggerMessageId}:approval_pending`,
+        });
+
         await updateTaskLifecycle({
             taskId: payload.taskId,
             conversationId: payload.conversationId,
@@ -1155,9 +1199,9 @@ async function processTaskExecutionRequested(payload: NormalizedTaskExecutionReq
         await emitTaskExecutionUpdate({
             taskId: payload.taskId,
             conversationId: payload.conversationId,
-            state: "failed",
+            state: "blocked",
             actionType: payload.actionType,
-            summary: null,
+            summary: "Awaiting human approval before execution.",
             error: "Approval required before executing this action.",
             updatedAt: new Date().toISOString(),
         });
@@ -1323,6 +1367,27 @@ async function processOneEvent(event: {
             } catch (error) {
                 throw error;
             }
+
+            await complete(eventId);
+            return;
+        }
+
+        if (event.topic === "task.execution.approved") {
+            if (!isTaskExecutionApprovedPayload(event.payload)) {
+                throw new Error("Invalid task.execution.approved payload shape");
+            }
+
+            const taskAction = await taskRepo.getTaskActionById(event.payload.taskActionId);
+            if (taskAction) {
+                await taskRepo.updateTaskActionExecutionState({
+                    taskActionId: event.payload.taskActionId,
+                    executionState: "approved",
+                    summary: taskAction.summary ?? "Approved by human reviewer.",
+                    error: null,
+                });
+            }
+
+            await agentRunner.runTask(String(event.payload.taskId));
 
             await complete(eventId);
             return;

@@ -261,7 +261,7 @@ export interface TaskLinkedToMessagePayload {
 export interface TaskExecutionUpdatedPayload {
     taskId: string;
     conversationId: string;
-    state: "queued" | "running" | "succeeded" | "failed";
+    state: "queued" | "running" | "succeeded" | "failed" | "blocked" | "approval_pending";
     actionType: TaskExecutionActionType;
     summary: string | null;
     error: string | null;

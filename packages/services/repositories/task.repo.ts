@@ -185,6 +185,46 @@ export async function getLatestExecutionTaskAction(taskId: string): Promise<ITas
         .exec();
 }
 
+export async function getTaskActionById(taskActionId: string): Promise<ITaskAction | null> {
+    await connectToDatabase();
+    return TaskActionModel.findById(toObjectId(taskActionId)).exec();
+}
+
+export async function getPendingApprovalTaskActions(conversationId?: string): Promise<ITaskAction[]> {
+    await connectToDatabase();
+
+    const query: Record<string, unknown> = {
+        executionState: "approval_pending",
+    };
+
+    if (conversationId) {
+        query.conversationId = toObjectId(conversationId);
+    }
+
+    return TaskActionModel.find(query)
+        .sort({ createdAt: -1 })
+        .exec();
+}
+
+export async function updateTaskActionExecutionState(input: {
+    taskActionId: string;
+    executionState: ITaskAction["executionState"];
+    summary?: string | null;
+    error?: string | null;
+}): Promise<ITaskAction | null> {
+    await connectToDatabase();
+
+    return TaskActionModel.findByIdAndUpdate(
+        input.taskActionId,
+        {
+            executionState: input.executionState,
+            ...(input.summary !== undefined ? { summary: input.summary } : {}),
+            ...(input.error !== undefined ? { error: input.error } : {}),
+        },
+        { new: true }
+    ).exec();
+}
+
 export async function linkMessageToTask(input: LinkMessageToTaskInput) {
     await connectToDatabase();
 
