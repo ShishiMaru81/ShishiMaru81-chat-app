@@ -1,11 +1,16 @@
-import type { Tool, ToolExecutionTask, ToolResult } from "./tool-registry.js";
+import type { Tool, ToolResult } from "./tool-registry.js";
+import { z } from "zod";
 
 export class SendEmailTool implements Tool {
-    name = "resend-email";
+    name = "send_email";
+    description = "Send transactional emails using the Resend API.";
+    inputSchema = z.object({
+        to: z.union([z.array(z.string().email()).min(1), z.string().email()]),
+        subject: z.string().min(1).max(200).optional(),
+        body: z.string().min(1).optional(),
+    }) as unknown as z.ZodType<Record<string, unknown>>;
 
-    capabilities = ["send_email"];
-
-    async execute(task: ToolExecutionTask): Promise<ToolResult> {
+    async execute(input: Record<string, unknown>, context: { taskId: string }): Promise<ToolResult> {
         const apiKey = process.env.RESEND_API_KEY;
         const from = process.env.RESEND_FROM_EMAIL;
 
@@ -13,23 +18,24 @@ export class SendEmailTool implements Tool {
             throw new Error("Email adapter is not configured. Set RESEND_API_KEY and RESEND_FROM_EMAIL.");
         }
 
-        const to = Array.isArray(task.parameters?.to)
-            ? task.parameters.to
-            : typeof task.parameters?.to === "string"
-                ? [task.parameters.to]
+        const toValue = input.to;
+        const to = Array.isArray(toValue)
+            ? toValue
+            : typeof toValue === "string"
+                ? [toValue]
                 : [];
 
         if (to.length === 0) {
             throw new Error("Email adapter requires parameters.to");
         }
 
-        const subject = typeof task.parameters?.subject === "string"
-            ? task.parameters.subject
-            : `Task update ${task.taskId}`;
+        const subject = typeof input.subject === "string"
+            ? input.subject
+            : `Task update ${context.taskId}`;
 
-        const body = typeof task.parameters?.body === "string"
-            ? task.parameters.body
-            : `Automated update for task ${task.taskId}.`;
+        const body = typeof input.body === "string"
+            ? input.body
+            : `Automated update for task ${context.taskId}.`;
 
         const response = await fetch("https://api.resend.com/emails", {
             method: "POST",

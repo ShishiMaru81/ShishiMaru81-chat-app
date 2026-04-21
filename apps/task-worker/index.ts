@@ -516,20 +516,21 @@ function verifyGithubIssueCreated(result: ActionExecutionResult): VerificationOu
 }
 
 function verifyActionResult(actionType: TaskExecutionActionType, result: ActionExecutionResult): VerificationOutcome {
-    switch (actionType) {
-        case "send_email":
-            return verifyEmailSent(result);
-        case "schedule_meeting":
-            return verifyMeetingScheduled(result);
-        case "create_github_issue":
-            return verifyGithubIssueCreated(result);
-        case "none":
-        default:
-            return {
-                success: result.adapterSuccess,
-                confidence: result.adapterSuccess ? 1 : 0,
-            };
+    const verifierMap: Record<string, (value: ActionExecutionResult) => VerificationOutcome> = {
+        send_email: verifyEmailSent,
+        schedule_meeting: verifyMeetingScheduled,
+        create_github_issue: verifyGithubIssueCreated,
+    };
+
+    const verifier = verifierMap[actionType];
+    if (verifier) {
+        return verifier(result);
     }
+
+    return {
+        success: result.adapterSuccess,
+        confidence: result.adapterSuccess ? 1 : 0,
+    };
 }
 
 async function executeCreateGithubIssueAction(payload: TaskExecutionRequestedPayload): Promise<ActionExecutionResult> {
@@ -704,21 +705,22 @@ async function executeSendEmailAction(payload: TaskExecutionRequestedPayload): P
 }
 
 async function executeActionAdapter(payload: TaskExecutionRequestedPayload): Promise<ActionExecutionResult> {
-    switch (payload.actionType) {
-        case "create_github_issue":
-            return executeCreateGithubIssueAction(payload);
-        case "schedule_meeting":
-            return executeScheduleMeetingAction(payload);
-        case "send_email":
-            return executeSendEmailAction(payload);
-        case "none":
-        default:
-            return {
-                summary: "No executable action selected.",
-                adapterSuccess: true,
-                evidence: { actionType: "none" },
-            };
+    const actionExecutors: Record<string, (value: TaskExecutionRequestedPayload) => Promise<ActionExecutionResult>> = {
+        create_github_issue: executeCreateGithubIssueAction,
+        schedule_meeting: executeScheduleMeetingAction,
+        send_email: executeSendEmailAction,
+    };
+
+    const executor = actionExecutors[payload.actionType];
+    if (!executor) {
+        return {
+            summary: "No executable action selected.",
+            adapterSuccess: true,
+            evidence: { actionType: payload.actionType },
+        };
     }
+
+    return executor(payload);
 }
 
 async function executeScheduleMeetingFallbackAction(payload: TaskExecutionRequestedPayload): Promise<ActionExecutionResult> {
@@ -863,24 +865,25 @@ async function executeGithubIssueFallbackAction(payload: TaskExecutionRequestedP
 }
 
 async function executeFallbackAdapter(payload: TaskExecutionRequestedPayload): Promise<ActionExecutionResult> {
-    switch (payload.actionType) {
-        case "schedule_meeting":
-            return executeScheduleMeetingFallbackAction(payload);
-        case "send_email":
-            return executeSendEmailFallbackAction(payload);
-        case "create_github_issue":
-            return executeGithubIssueFallbackAction(payload);
-        case "none":
-        default:
-            return {
-                summary: "No fallback adapter for action type.",
-                adapterSuccess: false,
-                evidence: {
-                    actionType: payload.actionType,
-                },
-                error: "Fallback adapter unavailable.",
-            };
+    const fallbackExecutors: Record<string, (value: TaskExecutionRequestedPayload) => Promise<ActionExecutionResult>> = {
+        schedule_meeting: executeScheduleMeetingFallbackAction,
+        send_email: executeSendEmailFallbackAction,
+        create_github_issue: executeGithubIssueFallbackAction,
+    };
+
+    const executor = fallbackExecutors[payload.actionType];
+    if (!executor) {
+        return {
+            summary: "No fallback adapter for action type.",
+            adapterSuccess: false,
+            evidence: {
+                actionType: payload.actionType,
+            },
+            error: "Fallback adapter unavailable.",
+        };
     }
+
+    return executor(payload);
 }
 
 async function executeActionWithFallback(payload: TaskExecutionRequestedPayload): Promise<ActionExecutionResult> {

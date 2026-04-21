@@ -1,9 +1,16 @@
+import { z } from "zod";
+
 export type ToolExecutionTask = {
     taskId: string;
     conversationId: string;
-    capability: string;
-    actionType: string;
+    toolName: string;
     parameters: Record<string, unknown>;
+    messageId: string | null;
+};
+
+export type ToolExecutionContext = {
+    taskId: string;
+    conversationId: string;
     messageId: string | null;
 };
 
@@ -16,26 +23,29 @@ export type ToolResult = {
 
 export interface Tool {
     name: string;
-    capabilities: string[];
-    execute(task: ToolExecutionTask): Promise<ToolResult>;
+    description: string;
+    inputSchema: z.ZodType<Record<string, unknown>>;
+    execute(input: Record<string, unknown>, context: ToolExecutionContext): Promise<ToolResult>;
 }
 
 export class ToolRegistry {
-    private readonly toolsByCapability = new Map<string, Tool[]>();
+    private readonly toolsByName = new Map<string, Tool>();
 
     register(tool: Tool) {
-        for (const capability of tool.capabilities) {
-            const existing = this.toolsByCapability.get(capability) ?? [];
-            this.toolsByCapability.set(capability, [...existing, tool]);
-        }
+        this.toolsByName.set(tool.name, tool);
     }
 
-    findToolsByCapability(capability: string): Tool[] {
-        return this.toolsByCapability.get(capability) ?? [];
+    get(toolName: string): Tool | undefined {
+        return this.toolsByName.get(toolName);
     }
 
-    hasCapability(capability: string): boolean {
-        return this.findToolsByCapability(capability).length > 0;
+    listForLLM() {
+        return [...this.toolsByName.values()].map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+            // Expose a JSON-serializable schema representation for LLM routing prompts.
+            inputSchema: (tool.inputSchema as unknown as { _def?: unknown })._def ?? null,
+        }));
     }
 }
 

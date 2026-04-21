@@ -1,11 +1,19 @@
-import type { Tool, ToolExecutionTask, ToolResult } from "./tool-registry.js";
+import type { Tool, ToolResult } from "./tool-registry.js";
+import { z } from "zod";
 
 export class ScheduleMeetingTool implements Tool {
-    name = "meeting-webhook";
+    name = "schedule_meeting";
+    description = "Schedule meetings via an external webhook adapter.";
+    inputSchema = z.object({
+        summary: z.string().min(1).max(200).optional(),
+        notes: z.string().min(1).optional(),
+        whenText: z.string().min(1).optional(),
+        attendeesText: z.string().min(1).optional(),
+        participants: z.array(z.string()).optional(),
+        attendees: z.array(z.string()).optional(),
+    }).passthrough() as unknown as z.ZodType<Record<string, unknown>>;
 
-    capabilities = ["schedule_meeting"];
-
-    async execute(task: ToolExecutionTask): Promise<ToolResult> {
+    async execute(input: Record<string, unknown>, context: { taskId: string; conversationId: string; messageId: string | null }): Promise<ToolResult> {
         const webhookUrl = process.env.SCHEDULE_MEETING_WEBHOOK_URL;
         if (!webhookUrl) {
             throw new Error("Schedule meeting adapter is not configured. Set SCHEDULE_MEETING_WEBHOOK_URL.");
@@ -17,10 +25,10 @@ export class ScheduleMeetingTool implements Tool {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                taskId: task.taskId,
-                conversationId: task.conversationId,
-                triggerMessageId: task.messageId,
-                parameters: task.parameters ?? {},
+                taskId: context.taskId,
+                conversationId: context.conversationId,
+                triggerMessageId: context.messageId,
+                parameters: input,
             }),
         });
 

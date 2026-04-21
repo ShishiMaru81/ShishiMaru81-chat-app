@@ -1,11 +1,16 @@
-import type { Tool, ToolExecutionTask, ToolResult } from "./tool-registry.js";
+import type { Tool, ToolResult } from "./tool-registry.js";
+import { z } from "zod";
 
 export class CreateIssueTool implements Tool {
-    name = "github-issue-api";
+    name = "create_github_issue";
+    description = "Create GitHub issues in a configured repository.";
+    inputSchema = z.object({
+        title: z.string().min(1).max(200).optional(),
+        body: z.string().min(1).optional(),
+        labels: z.array(z.string()).optional(),
+    }).passthrough() as unknown as z.ZodType<Record<string, unknown>>;
 
-    capabilities = ["create_issue", "create_github_issue"];
-
-    async execute(task: ToolExecutionTask): Promise<ToolResult> {
+    async execute(input: Record<string, unknown>, context: { taskId: string; conversationId: string }): Promise<ToolResult> {
         const token = process.env.GITHUB_TOKEN;
         const repo = process.env.GITHUB_REPO;
 
@@ -13,12 +18,12 @@ export class CreateIssueTool implements Tool {
             throw new Error("GitHub adapter is not configured. Set GITHUB_TOKEN and GITHUB_REPO=owner/repo.");
         }
 
-        const title = typeof task.parameters?.title === "string"
-            ? task.parameters.title
-            : `Task: ${task.taskId}`;
-        const body = typeof task.parameters?.body === "string"
-            ? task.parameters.body
-            : `Auto-created from task ${task.taskId} in conversation ${task.conversationId}.`;
+        const title = typeof input.title === "string"
+            ? input.title
+            : `Task: ${context.taskId}`;
+        const body = typeof input.body === "string"
+            ? input.body
+            : `Auto-created from task ${context.taskId} in conversation ${context.conversationId}.`;
 
         const response = await fetch(`https://api.github.com/repos/${repo}/issues`, {
             method: "POST",

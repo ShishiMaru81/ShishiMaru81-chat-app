@@ -3,7 +3,7 @@ import { RetryManager } from "./retry-manager.js";
 import * as taskPlannerModule from "@chat/services/task-planner.service";
 import * as taskRepo from "@chat/services/repositories/task.repo";
 import * as taskModule from "@chat/db/models/Task";
-import ToolRegistry, { type ToolExecutionTask, type ToolResult } from "./tools/tool-registry.js";
+import ToolRegistry from "./tools/tool-registry.js";
 import TaskSuccessRegistry, { createDefaultTaskSuccessRegistry } from "./task-success-registry.js";
 import { CreateIssueTool } from "./tools/create-issue.tool.js";
 import { ScheduleMeetingTool } from "./tools/schedule-meeting.tool.js";
@@ -24,7 +24,7 @@ type TaskPlannerLike = {
 type ExecutionActionRecord = {
     taskId: string;
     conversationId: string;
-    actionType: TaskExecutionActionType;
+    toolName: string;
     parameters: Record<string, unknown>;
     messageId: string | null;
     executionState: string | null;
@@ -311,7 +311,7 @@ export class AgentRunner {
             action: {
                 taskId: action.taskId.toString(),
                 conversationId: action.conversationId.toString(),
-                actionType: action.actionType as TaskExecutionActionType,
+                toolName: action.actionType,
                 parameters: action.parameters ?? {},
                 messageId: action.messageId ? action.messageId.toString() : null,
                 executionState: action.executionState ?? null,
@@ -321,7 +321,7 @@ export class AgentRunner {
             attemptPayload: {
                 taskId: action.taskId.toString(),
                 conversationId: action.conversationId.toString(),
-                actionType: action.actionType as TaskExecutionActionType,
+                toolName: action.actionType,
                 parameters: action.parameters ?? {},
                 messageId: action.messageId ? action.messageId.toString() : null,
                 executionState: action.executionState ?? null,
@@ -334,7 +334,7 @@ export class AgentRunner {
 
         console.log("agent-runner lifecycle:start", {
             taskId,
-            actionType: context.action.actionType,
+            toolName: context.action.toolName,
             retryCount: context.retryCount,
             maxRetries: context.maxRetries,
             resumeStep,
@@ -349,7 +349,7 @@ export class AgentRunner {
         while (context.retryCount < context.maxRetries && task.status !== "completed") {
             console.log("agent-runner lifecycle:loop", {
                 taskId,
-                actionType: context.attemptPayload.actionType,
+                toolName: context.attemptPayload.toolName,
                 retryCount: context.retryCount,
                 maxRetries: context.maxRetries,
             });
@@ -784,20 +784,6 @@ export class AgentRunner {
         }
     }
 
-    private capabilityForActionType(actionType: TaskExecutionActionType) {
-        switch (actionType) {
-            case "send_email":
-                return "send_email";
-            case "schedule_meeting":
-                return "schedule_meeting";
-            case "create_github_issue":
-                return "create_issue";
-            case "none":
-            default:
-                return "none";
-        }
-    }
-
     private async observe(_context: LoopContext, result: ActionExecutionResult): Promise<ActionExecutionResult> {
         console.log("agent-runner step:observe", {
             summary: result.summary,
@@ -808,101 +794,72 @@ export class AgentRunner {
     }
 
     private async execute(payload: ExecutionActionRecord): Promise<ActionExecutionResult> {
-        const capability = this.capabilityForActionType(payload.actionType);
-        const tools = this.toolRegistry.findToolsByCapability(capability);
+        const tool = this.toolRegistry.get(payload.toolName);
 
         console.log("agent-runner step:execute", {
             taskId: payload.taskId,
-            actionType: payload.actionType,
-            capability,
-            toolCount: tools.length,
+            toolName: payload.toolName,
             parameters: payload.parameters,
         });
 
-        if (tools.length === 0) {
+        if (!tool) {
             return {
-                summary: `No tool registered for capability ${capability}.`,
+                summary: `No tool registered for name ${payload.toolName}.`,
                 adapterSuccess: false,
-                evidence: { actionType: payload.actionType, capability },
-                error: `No tool registered for capability ${capability}`,
+                evidence: { toolName: payload.toolName },
+                error: `No tool registered for name ${payload.toolName}`,
             };
         }
 
-        const executionTask: ToolExecutionTask = {
-            taskId: payload.taskId,
-            conversationId: payload.conversationId,
-            capability,
-            actionType: payload.actionType,
-            parameters: payload.parameters,
-            messageId: payload.messageId,
-        };
+        try {
+            const parsedInput = tool.inputSchema.parse(payload.parameters ?? {});
+            const result = await tool.execute(parsedInput, {
+                taskId: payload.taskId,
+                conversationId: payload.conversationId,
+                messageId: payload.messageId,
+            });
 
-        let lastFailure: ToolResult | null = null;
+            console.log("agent-runner step:tool-execute", {
+                taskId: payload.taskId,
+                toolName: tool.name,
+                success: result.adapterSuccess,
+            });
 
-        for (const tool of tools) {
-            try {
-                const result = await tool.execute(executionTask);
-                console.log("agent-runner step:tool-execute", {
-                    taskId: payload.taskId,
-                    capability,
+            return {
+                ...result,
+                evidence: {
                     toolName: tool.name,
-                    success: result.adapterSuccess,
-                });
+                    result: result.evidence,
+                },
+            };
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "unknown tool error";
+            console.warn("agent-runner step:tool-failure", {
+                taskId: payload.taskId,
+                toolName: tool.name,
+                reason: message,
+            });
 
-                if (result.adapterSuccess) {
-                    return {
-                        ...result,
-                        evidence: {
-                            toolName: tool.name,
-                            capability,
-                            result: result.evidence,
-                        },
-                    };
-                }
-
-                lastFailure = result;
-            } catch (error) {
-                const message = error instanceof Error ? error.message : "unknown tool error";
-                lastFailure = {
-                    summary: `Tool ${tool.name} failed.`,
-                    adapterSuccess: false,
-                    evidence: {
-                        toolName: tool.name,
-                        capability,
-                        reason: message,
-                    },
-                    error: message,
-                };
-
-                console.warn("agent-runner step:tool-failure", {
-                    taskId: payload.taskId,
-                    capability,
+            return {
+                summary: `Tool ${tool.name} failed.`,
+                adapterSuccess: false,
+                evidence: {
                     toolName: tool.name,
                     reason: message,
-                });
-            }
+                },
+                error: message,
+            };
         }
-
-        return {
-            summary: lastFailure?.summary ?? `All tools failed for capability ${capability}.`,
-            adapterSuccess: false,
-            evidence: {
-                capability,
-                toolCount: tools.length,
-                lastFailure: lastFailure?.evidence ?? null,
-            },
-            error: lastFailure?.error ?? `All tools failed for capability ${capability}`,
-        };
     }
 
     private async verify(result: ActionExecutionResult, context: LoopContext): Promise<VerificationOutcome> {
-        const validationLog = this.taskSuccessRegistry.validate(context.action.actionType, context.task, result);
+        const validationLog = this.taskSuccessRegistry.validate(context.action.toolName as TaskExecutionActionType, context.task, result);
         const passedChecks = validationLog.checks.filter((check) => check.passed).length;
         const totalChecks = validationLog.checks.length;
         const confidence = totalChecks > 0 ? passedChecks / totalChecks : (validationLog.passed ? 1 : 0);
 
         console.log("agent-runner step:verify", {
-            actionType: context.action.actionType,
+            toolName: context.action.toolName,
             evidence: result.evidence,
             validator: validationLog.validator,
             passed: validationLog.passed,
@@ -919,7 +876,7 @@ export class AgentRunner {
     private async adjust(context: LoopContext, result: ActionExecutionResult | null, verification: VerificationOutcome): Promise<ExecutionActionRecord> {
         const nextParameters = { ...(context.attemptPayload.parameters ?? {}) };
 
-        if (context.action.actionType === "send_email") {
+        if (context.action.toolName === "send_email") {
             nextParameters.subject = typeof nextParameters.subject === "string" && nextParameters.subject.trim().length > 0
                 ? nextParameters.subject
                 : `${context.task.title} - follow up`;
@@ -931,7 +888,7 @@ export class AgentRunner {
             }
         }
 
-        if (context.action.actionType === "schedule_meeting") {
+        if (context.action.toolName === "schedule_meeting") {
             nextParameters.summary = typeof nextParameters.summary === "string" && nextParameters.summary.trim().length > 0
                 ? nextParameters.summary
                 : context.task.title;
@@ -943,7 +900,7 @@ export class AgentRunner {
             }
         }
 
-        if (context.action.actionType === "create_github_issue") {
+        if (context.action.toolName === "create_github_issue") {
             nextParameters.title = typeof nextParameters.title === "string" && nextParameters.title.trim().length > 0
                 ? nextParameters.title
                 : context.task.title;
@@ -962,7 +919,7 @@ export class AgentRunner {
 
         console.log("agent-runner step:adjust", {
             taskId: context.task._id.toString(),
-            actionType: context.action.actionType,
+            toolName: context.action.toolName,
             retryCount: context.retryCount,
             verificationConfidence: verification.confidence,
             adjustedParameters: nextParameters,
