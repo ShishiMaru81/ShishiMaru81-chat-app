@@ -1199,6 +1199,7 @@ async function processTaskExecutionRequested(payload: NormalizedTaskExecutionReq
                 actorType: payload.requestedByType,
                 actorId: payload.requestedById,
                 actionType: payload.actionType,
+                toolName: payload.actionType,
                 messageId: payload.triggerMessageId,
                 parameters: payload.parameters,
                 executionState: "approval_pending",

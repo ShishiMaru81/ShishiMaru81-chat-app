@@ -1,10 +1,10 @@
-import type {
-    MessageSemanticType,
-    MessageSemanticUpdatedPayload,
-    TaskExecutionActionType,
-    TaskCreatedPayload,
-    TaskLinkedToMessagePayload,
-    TaskUpdatedPayload,
+import {
+    type MessageSemanticType,
+    type MessageSemanticUpdatedPayload,
+    type TaskExecutionActionType,
+    type TaskCreatedPayload,
+    type TaskLinkedToMessagePayload,
+    type TaskUpdatedPayload,
 } from "@chat/types";
 import MessageModel from "@/models/Message";
 import TaskModel from "@/models/Task";
@@ -159,6 +159,17 @@ type LlmDecision = {
     taskTitle?: string;
     taskDescription?: string;
 };
+
+const EXECUTION_TOOLS: ReadonlyArray<{ name: Exclude<TaskExecutionActionType, "none">; inputFields: string[] }> = [
+    { name: "create_github_issue", inputFields: ["title", "body", "labels"] },
+    { name: "schedule_meeting", inputFields: ["summary", "notes", "whenText", "attendeesText"] },
+    { name: "send_email", inputFields: ["to", "subject", "body"] },
+];
+const EXECUTION_ACTION_ENUM: TaskExecutionActionType[] = [...EXECUTION_TOOLS.map((tool) => tool.name), "none"];
+
+function buildExecutionToolPromptLines() {
+    return EXECUTION_TOOLS.map((tool) => `- ${tool.name}: ${tool.inputFields.join(", ")}`);
+}
 
 function clampConfidence(value: number | undefined, fallback: number) {
     if (typeof value !== "number" || Number.isNaN(value)) return fallback;
@@ -697,6 +708,7 @@ async function classifyMessageWithLLM(content: string): Promise<IntelligenceDeci
         };
     }
 
+    const toolPromptLines = buildExecutionToolPromptLines();
     const response = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: {
@@ -715,14 +727,12 @@ async function classifyMessageWithLLM(content: string): Promise<IntelligenceDeci
                             "If the message explicitly requests email delivery, choose send_email even if it also mentions fixing a bug.",
                             "If the message explicitly requests scheduling, choose schedule_meeting.",
                             "Extract useful parameters:",
-                            "- send_email: to, subject, body",
-                            "- schedule_meeting: summary, notes, whenText, attendeesText",
-                            "- create_github_issue: title, body, labels",
+                            ...toolPromptLines,
                             "Also produce taskTitle and taskDescription suitable for a task board.",
                             "taskTitle must be concise and actionable (max 120 chars).",
                             "taskDescription must be clear and professional with concrete outcome.",
                             "Return strict JSON only with: semanticType, confidence, actionType, parameters, needsApproval, taskTitle, taskDescription.",
-                            "actionType must be one of create_github_issue, schedule_meeting, send_email, none.",
+                            `actionType must be one of ${EXECUTION_ACTION_ENUM.join(", ")}.`,
                         ].join(" "),
                 },
                 { role: "user", content },
@@ -742,7 +752,7 @@ async function classifyMessageWithLLM(content: string): Promise<IntelligenceDeci
                             confidence: { type: "number", minimum: 0, maximum: 1 },
                             actionType: {
                                 type: "string",
-                                enum: ["create_github_issue", "schedule_meeting", "send_email", "none"],
+                                enum: EXECUTION_ACTION_ENUM,
                             },
                             parameters: {
                                 type: "object",
@@ -972,6 +982,7 @@ export async function processMessageTaskIntelligence(
                 actorType: "agent",
                 actorId: null,
                 actionType: decision.execution.actionType,
+                toolName: decision.execution.actionType,
                 messageId: input.messageId,
                 parameters: decision.execution.parameters,
                 executionState: "requested",

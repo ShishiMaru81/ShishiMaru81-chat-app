@@ -120,6 +120,7 @@ export const CreateTaskActionSchema = z.object({
         "send_email",
         "none",
     ]),
+    toolName: z.string().min(1).max(120).nullable().optional(),
     messageId: z.string().min(1).nullable().optional().default(null),
     parameters: z.record(z.string(), z.unknown()).optional(),
     executionState: z.enum(["requested", "approval_pending", "approved", "rejected", "queued", "running", "succeeded", "failed", "blocked", "expired"]).nullable().optional(),

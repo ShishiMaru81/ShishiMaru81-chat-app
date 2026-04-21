@@ -25,6 +25,7 @@ export interface ITaskAction {
     actorType: TaskActorType;
     actorId?: mongoose.Types.ObjectId | null;
     actionType: TaskActionType;
+    toolName?: string | null;
     messageId?: mongoose.Types.ObjectId | null;
     parameters?: Record<string, unknown>;
     executionState?: TaskActionExecutionState;
@@ -65,6 +66,7 @@ const TaskActionSchema = new Schema<ITaskAction>(
             required: true,
             index: true,
         },
+        toolName: { type: String, trim: true, maxlength: 120, default: null, index: true },
         messageId: { type: Schema.Types.ObjectId, ref: "Message", default: null, index: true },
         parameters: { type: Schema.Types.Mixed, default: {} },
         executionState: {

@@ -138,7 +138,7 @@ function resolveTaskPlannerConstructor(moduleNs: unknown): new () => TaskPlanner
 
 function resolveGetLatestExecutionTaskAction(
     moduleNs: unknown
-): (taskId: string) => Promise<{ taskId: { toString(): string }; conversationId: { toString(): string }; actionType: string; parameters?: Record<string, unknown> | null; messageId?: { toString(): string } | null; executionState?: string | null } | null> {
+): (taskId: string) => Promise<{ taskId: { toString(): string }; conversationId: { toString(): string }; actionType: string; toolName?: string | null; parameters?: Record<string, unknown> | null; messageId?: { toString(): string } | null; executionState?: string | null } | null> {
     const asRecord = moduleNs as Record<string, unknown>;
     const defaultExport = asRecord?.default as Record<string, unknown> | undefined;
     const candidates: unknown[] = [
@@ -148,7 +148,7 @@ function resolveGetLatestExecutionTaskAction(
 
     for (const candidate of candidates) {
         if (typeof candidate === "function") {
-            return candidate as (taskId: string) => Promise<{ taskId: { toString(): string }; conversationId: { toString(): string }; actionType: string; parameters?: Record<string, unknown> | null; messageId?: { toString(): string } | null; executionState?: string | null } | null>;
+            return candidate as (taskId: string) => Promise<{ taskId: { toString(): string }; conversationId: { toString(): string }; actionType: string; toolName?: string | null; parameters?: Record<string, unknown> | null; messageId?: { toString(): string } | null; executionState?: string | null } | null>;
         }
     }
 
@@ -311,7 +311,7 @@ export class AgentRunner {
             action: {
                 taskId: action.taskId.toString(),
                 conversationId: action.conversationId.toString(),
-                toolName: action.actionType,
+                toolName: action.toolName ?? action.actionType,
                 parameters: action.parameters ?? {},
                 messageId: action.messageId ? action.messageId.toString() : null,
                 executionState: action.executionState ?? null,
@@ -321,7 +321,7 @@ export class AgentRunner {
             attemptPayload: {
                 taskId: action.taskId.toString(),
                 conversationId: action.conversationId.toString(),
-                toolName: action.actionType,
+                toolName: action.toolName ?? action.actionType,
                 parameters: action.parameters ?? {},
                 messageId: action.messageId ? action.messageId.toString() : null,
                 executionState: action.executionState ?? null,

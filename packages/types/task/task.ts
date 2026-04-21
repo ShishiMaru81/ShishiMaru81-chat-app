@@ -17,7 +17,11 @@ export type TaskActionType =
     | "linked_message"
     | "unlinked_message"
     | "commented"
-    | "ai_reclassified";
+    | "ai_reclassified"
+    | "create_github_issue"
+    | "schedule_meeting"
+    | "send_email"
+    | "none";
 
 export type TaskActorType = "user" | "agent" | "system";
 
@@ -118,6 +122,7 @@ export interface TaskActionRecord {
     actorType: TaskActorType;
     actorId: string | null;
     actionType: TaskActionType;
+    toolName: string | null;
     messageId: string | null;
     executionState: "requested" | "approval_pending" | "approved" | "rejected" | "queued" | "running" | "succeeded" | "failed" | "blocked" | "expired" | null;
     summary: string | null;

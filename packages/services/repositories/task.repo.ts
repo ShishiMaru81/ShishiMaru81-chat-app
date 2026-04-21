@@ -158,6 +158,7 @@ export async function createTaskAction(input: CreateTaskActionInput): Promise<IT
         actorType: input.actorType,
         actorId: input.actorId ? toObjectId(input.actorId) : null,
         actionType: input.actionType,
+        toolName: input.toolName ?? input.actionType,
         messageId: input.messageId ? toObjectId(input.messageId) : null,
         parameters: input.parameters ?? {},
         executionState: input.executionState ?? null,
@@ -177,12 +178,50 @@ export async function getLatestExecutionTaskAction(taskId: string): Promise<ITas
 
     return TaskActionModel.findOne({
         taskId: toObjectId(taskId),
-        actionType: {
-            $in: ["create_github_issue", "schedule_meeting", "send_email"],
-        },
+        $or: [
+            {
+                toolName: {
+                    $in: ["create_github_issue", "schedule_meeting", "send_email"],
+                },
+            },
+            {
+                actionType: {
+                    $in: ["create_github_issue", "schedule_meeting", "send_email"],
+                },
+            },
+        ],
     })
         .sort({ createdAt: -1 })
         .exec();
+}
+
+export async function migrateTaskActionToolNames(taskId?: string): Promise<{ matchedCount: number; modifiedCount: number }> {
+    await connectToDatabase();
+
+    const query: Record<string, unknown> = {
+        $or: [
+            { toolName: { $exists: false } },
+            { toolName: null },
+            { toolName: "" },
+        ],
+    };
+
+    if (taskId) {
+        query.taskId = toObjectId(taskId);
+    }
+
+    const result = await TaskActionModel.updateMany(query, [
+        {
+            $set: {
+                toolName: "$actionType",
+            },
+        },
+    ]);
+
+    return {
+        matchedCount: result.matchedCount,
+        modifiedCount: result.modifiedCount,
+    };
 }
 
 export async function getTaskActionById(taskActionId: string): Promise<ITaskAction | null> {

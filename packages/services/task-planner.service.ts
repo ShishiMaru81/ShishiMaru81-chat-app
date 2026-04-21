@@ -181,6 +181,7 @@ export class TaskPlanner {
                 actorType: "agent",
                 actorId: null,
                 actionType: step.actionType,
+                toolName: step.actionType,
                 messageId: latestAction?.messageId ? latestAction.messageId.toString() : null,
                 parameters: executionParameters,
                 executionState: "requested",

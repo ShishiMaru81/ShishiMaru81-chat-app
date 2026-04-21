@@ -20,6 +20,7 @@ function serializeTaskAction(action: Awaited<ReturnType<typeof getPendingApprova
         actorType: action.actorType,
         actorId: action.actorId ? action.actorId.toString() : null,
         actionType: action.actionType,
+        toolName: action.toolName ?? null,
         messageId: action.messageId ? action.messageId.toString() : null,
         parameters: action.parameters ?? {},
         executionState: action.executionState ?? null,
