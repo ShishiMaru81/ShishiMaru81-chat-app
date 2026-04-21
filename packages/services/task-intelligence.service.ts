@@ -1,7 +1,5 @@
 import {
-    type MessageSemanticType,
     type MessageSemanticUpdatedPayload,
-    type TaskExecutionActionType,
     type TaskCreatedPayload,
     type TaskLinkedToMessagePayload,
     type TaskUpdatedPayload,
@@ -19,57 +17,7 @@ import {
 import { connectToDatabase } from "@/lib/Db/db";
 import { enqueueOutboxEvent } from "@/lib/services/outbox.service";
 
-const AI_VERSION = "intelligent-v2";
-const STRICT_EMAIL_TEMPLATE_MODE = process.env.STRICT_EMAIL_TEMPLATE_MODE !== "false";
-const STRICT_ACTION_TEMPLATE_MODE = process.env.STRICT_ACTION_TEMPLATE_MODE !== "false";
-
-const TASK_TERMS = [
-    "fix",
-    "deploy",
-    "review",
-    "ship",
-    "implement",
-    "create",
-    "update",
-    "write",
-    "investigate",
-    "test",
-    "refactor",
-    "prepare",
-    "assign",
-    "please",
-    "todo",
-];
-
-const DECISION_TERMS = ["decided", "decision", "approved", "go with", "choose", "selected"];
-const REMINDER_TERMS = ["remind", "reminder", "by tomorrow", "deadline", "due", "eod", "today"];
-const GITHUB_BUG_KEYWORDS = ["bug", "error", "issue", "fix", "broken"];
-const GITHUB_INTENT_KEYWORDS = ["create", "open", "report", "track"];
-const EMAIL_INTENT_KEYWORDS = ["send an email", "send email", "email ", "mail to", "notify by email"];
-const MEETING_INTENT_KEYWORDS = ["schedule a meeting", "schedule meeting", "book a meeting", "set up a meeting", "set up a call", "calendar invite", "sync up"];
-
-interface ClassificationResult {
-    semanticType: MessageSemanticType;
-    confidence: number;
-}
-
-interface TaskExecutionDecision {
-    actionType: TaskExecutionActionType;
-    parameters: Record<string, unknown>;
-    confidence: number;
-    needsApproval: boolean;
-}
-
-interface TaskDraft {
-    title: string;
-    description: string;
-}
-
-interface IntelligenceDecision {
-    classification: ClassificationResult;
-    execution: TaskExecutionDecision;
-    taskDraft: TaskDraft;
-}
+const AI_VERSION = "intelligent-v3-preprocess";
 
 export interface ProcessMessageTaskIntelligenceInput {
     messageId: string;
@@ -90,100 +38,13 @@ function normalizeContent(content: string) {
     return content.trim().replace(/\s+/g, " ");
 }
 
-function extractAfterPhrase(content: string, phrase: string) {
-    const lowerContent = content.toLowerCase();
-    const lowerPhrase = phrase.toLowerCase();
-    const index = lowerContent.indexOf(lowerPhrase);
-    if (index === -1) {
-        return null;
-    }
+function toTaskTitle(content: string) {
+    const normalized = normalizeContent(content);
+    if (!normalized) return "Follow up";
 
-    const extracted = content.slice(index + phrase.length).trim();
-    return extracted.length > 0 ? extracted : null;
-}
-
-function trimTrailingSentenceSeparators(value: string) {
-    let end = value.length;
-    while (end > 0) {
-        const char = value[end - 1];
-        if (char === "." || char === " " || char === "\t" || char === "\n" || char === "\r") {
-            end -= 1;
-            continue;
-        }
-        break;
-    }
-
-    return value.slice(0, end);
-}
-
-function capitalizeFirst(value: string) {
-    if (!value) return value;
-    return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function classifyMessage(content: string): ClassificationResult {
-    const normalized = normalizeContent(content).toLowerCase();
-    if (!normalized) {
-        return { semanticType: "unknown", confidence: 0 };
-    }
-
-    const explicitAction = inferExplicitAction(content);
-    if (explicitAction && explicitAction !== "none") {
-        return { semanticType: "task", confidence: 0.9 };
-    }
-
-    const hasTaskTerm = TASK_TERMS.some((term) => normalized.includes(term));
-    const hasDecisionTerm = DECISION_TERMS.some((term) => normalized.includes(term));
-    const hasReminderTerm = REMINDER_TERMS.some((term) => normalized.includes(term));
-
-    if (hasTaskTerm) {
-        return { semanticType: "task", confidence: 0.82 };
-    }
-
-    if (hasDecisionTerm) {
-        return { semanticType: "decision", confidence: 0.76 };
-    }
-
-    if (hasReminderTerm) {
-        return { semanticType: "reminder", confidence: 0.72 };
-    }
-
-    return { semanticType: "chat", confidence: 0.94 };
-}
-type LlmDecision = {
-    semanticType: "task" | "chat" | "decision" | "reminder" | "unknown";
-    confidence: number;
-    actionType: TaskExecutionActionType;
-    parameters?: Record<string, unknown>;
-    needsApproval: boolean;
-    taskTitle?: string;
-    taskDescription?: string;
-};
-
-const EXECUTION_TOOLS: ReadonlyArray<{ name: Exclude<TaskExecutionActionType, "none">; inputFields: string[] }> = [
-    { name: "create_github_issue", inputFields: ["title", "body", "labels"] },
-    { name: "schedule_meeting", inputFields: ["summary", "notes", "whenText", "attendeesText"] },
-    { name: "send_email", inputFields: ["to", "subject", "body"] },
-];
-const EXECUTION_ACTION_ENUM: TaskExecutionActionType[] = [...EXECUTION_TOOLS.map((tool) => tool.name), "none"];
-
-function buildExecutionToolPromptLines() {
-    return EXECUTION_TOOLS.map((tool) => `- ${tool.name}: ${tool.inputFields.join(", ")}`);
-}
-
-function clampConfidence(value: number | undefined, fallback: number) {
-    if (typeof value !== "number" || Number.isNaN(value)) return fallback;
-    if (value < 0) return 0;
-    if (value > 1) return 1;
-    return value;
-}
-
-function hasAnyTerm(text: string, terms: string[]) {
-    return terms.some((term) => text.includes(term));
-}
-
-function isValidEmail(value: string) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+    const withoutPrefix = normalized.replace(/^(@\w+[:,]?\s*)+/, "");
+    const trimmed = withoutPrefix.slice(0, 200);
+    return trimmed.length >= 3 ? trimmed : normalized.slice(0, 200);
 }
 
 function buildTaskDescription(content: string) {
@@ -192,668 +53,16 @@ function buildTaskDescription(content: string) {
         return "No additional context was provided.";
     }
 
-    let stripped = normalized;
-    const lower = normalized.toLowerCase();
-
-    if (lower.startsWith("send an email to ")) {
-        const sayingIndex = lower.indexOf(" saying ");
-        if (sayingIndex !== -1) {
-            stripped = normalized.slice(sayingIndex + " saying ".length);
-        }
-    }
-
-    if (stripped.toLowerCase().startsWith("please ")) {
-        stripped = stripped.slice("please ".length);
-    }
-
-    stripped = stripped.trim();
-
-    return stripped.length > 0
-        ? `Requested outcome: ${capitalizeFirst(stripped)}`
-        : `Requested outcome: ${normalized}`;
+    return `Requested outcome: ${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
 }
 
-function normalizeTaskDraft(content: string, draft: Partial<TaskDraft> | null | undefined): TaskDraft {
-    const fallbackTitle = toTaskTitle(content);
-    const fallbackDescription = buildTaskDescription(content);
-
-    const normalizedTitle = typeof draft?.title === "string" ? normalizeContent(draft.title) : "";
-    const normalizedDescription = typeof draft?.description === "string" ? normalizeContent(draft.description) : "";
-
-    return {
-        title: normalizedTitle.length >= 3 ? normalizedTitle.slice(0, 200) : fallbackTitle,
-        description: normalizedDescription.length > 0 ? normalizedDescription.slice(0, 8000) : fallbackDescription,
-    };
-}
-
-function buildEmailCopy(content: string, baseTitle: string) {
+function preprocessMessage(content: string) {
     const normalized = normalizeContent(content);
-    const requestedMessage = extractAfterPhrase(normalized, "saying ") ?? normalized;
-    const sentence = capitalizeFirst(requestedMessage);
-
     return {
-        subject: `Update: ${baseTitle}`.slice(0, 160),
-        body: `${sentence}${sentence.endsWith(".") ? "" : "."}\n\nRegards,\nTaskFlow Intelligence Agent`,
+        normalized,
+        title: toTaskTitle(normalized),
+        description: buildTaskDescription(normalized),
     };
-}
-
-function buildImpactfulEmailSubject(content: string, baseTitle: string) {
-    const normalized = normalizeContent(content).toLowerCase();
-    if (normalized.includes("docker build failure")) {
-        return "🚨 Docker Build Failure Detected";
-    }
-
-    if (normalized.includes("login bug") || normalized.includes("login issue")) {
-        return "🚨 Login Bug Status Update";
-    }
-
-    return `🚨 ${baseTitle}`.slice(0, 160);
-}
-
-function buildStrictEmailTemplate(content: string, baseTitle: string, recipients: string[]) {
-    const normalized = normalizeContent(content);
-    const updateFromReport = extractAfterPhrase(normalized, "to report ");
-    const updateFromSaying = extractAfterPhrase(normalized, "saying ");
-    const requestedUpdate = updateFromReport || updateFromSaying || "The requested task update is complete";
-    const cleanUpdate = capitalizeFirst(trimTrailingSentenceSeparators(requestedUpdate));
-
-    const recipientLabel = recipients.length > 0 ? recipients[0] : "there";
-    const impactfulSubject = buildImpactfulEmailSubject(content, baseTitle);
-
-    return {
-        subject: impactfulSubject,
-        body: [
-            `Hello ${recipientLabel},`,
-            "",
-            `Quick update: ${cleanUpdate}.`,
-            "",
-            "Please let me know if you need any additional details.",
-            "",
-            "Best regards,",
-            "TaskFlow Intelligence Agent",
-        ].join("\n"),
-    };
-}
-
-function buildStrictMeetingTemplate(content: string, baseTitle: string, hints: { whenText: string | null; attendeesText: string | null }) {
-    const normalized = normalizeContent(content);
-    const meetingGoal = normalized
-        .replace(/^schedule (a )?(meeting|call|sync)\s*/i, "")
-        .replace(/^with\s+/i, "")
-        .trim();
-
-    const objective = meetingGoal.length > 0 ? meetingGoal : "Discuss the requested update and next steps";
-
-    return {
-        summary: `Meeting Request: ${baseTitle}`.slice(0, 200),
-        notes: [
-            "Objective:",
-            `${objective.charAt(0).toUpperCase()}${objective.slice(1)}.`,
-            "",
-            `Proposed time: ${hints.whenText ?? "To be confirmed"}.`,
-            `Attendees: ${hints.attendeesText ?? "To be confirmed"}.`,
-            "",
-            "Agenda:",
-            "1) Review current status",
-            "2) Discuss blockers",
-            "3) Confirm next actions",
-        ].join("\n"),
-        whenText: hints.whenText,
-        attendeesText: hints.attendeesText,
-    };
-}
-
-function buildStrictGithubIssueTemplate(content: string, baseTitle: string) {
-    const normalized = normalizeContent(content);
-    const stripped = normalized
-        .replace(/^create (a )?github issue\s*/i, "")
-        .replace(/^report\s*/i, "")
-        .trim();
-
-    const problemStatement = stripped.length > 0 ? stripped : normalized;
-    const cleanProblem = `${capitalizeFirst(trimTrailingSentenceSeparators(problemStatement))}.`;
-
-    return {
-        title: `Bug Report: ${baseTitle}`.slice(0, 200),
-        body: [
-            "## Summary",
-            cleanProblem,
-            "",
-            "## Impact",
-            "The issue affects normal workflow and should be investigated promptly.",
-            "",
-            "## Expected Result",
-            "The affected flow should complete successfully without errors.",
-            "",
-            "## Suggested Next Steps",
-            "1. Reproduce the issue locally",
-            "2. Identify root cause",
-            "3. Implement and verify a fix",
-        ].join("\n"),
-    };
-}
-
-function isAsciiAlphaNumeric(char: string) {
-    const code = char.charCodeAt(0);
-    return (code >= 48 && code <= 57)
-        || (code >= 65 && code <= 90)
-        || (code >= 97 && code <= 122);
-}
-
-function isValidLocalPart(local: string) {
-    if (!local || local.startsWith(".") || local.endsWith(".")) return false;
-
-    for (let i = 0; i < local.length; i += 1) {
-        const char = local[i];
-        if (isAsciiAlphaNumeric(char)) continue;
-        if (char === "." || char === "_" || char === "%" || char === "+" || char === "-") continue;
-        return false;
-    }
-
-    return !local.includes("..");
-}
-
-function isValidDomainPart(domain: string) {
-    if (!domain || domain.startsWith(".") || domain.endsWith(".")) return false;
-    if (!domain.includes(".")) return false;
-
-    const labels = domain.split(".");
-    if (labels.some((label) => label.length === 0)) return false;
-
-    for (const label of labels) {
-        if (label.startsWith("-") || label.endsWith("-")) return false;
-        for (let i = 0; i < label.length; i += 1) {
-            const char = label[i];
-            if (isAsciiAlphaNumeric(char) || char === "-") continue;
-            return false;
-        }
-    }
-
-    return labels[labels.length - 1].length >= 2;
-}
-
-function stripEmailToken(token: string) {
-    let start = 0;
-    let end = token.length;
-    const trimChars = new Set(["<", ">", "(", ")", "[", "]", "{", "}", "\"", "'", ",", ";", ":", ".", "!", "?"]);
-
-    while (start < end && trimChars.has(token[start])) {
-        start += 1;
-    }
-    while (end > start && trimChars.has(token[end - 1])) {
-        end -= 1;
-    }
-
-    return token.slice(start, end);
-}
-
-function isLikelyEmail(value: string) {
-    const atIndex = value.indexOf("@");
-    if (atIndex <= 0) return false;
-    if (atIndex !== value.lastIndexOf("@")) return false;
-
-    const local = value.slice(0, atIndex);
-    const domain = value.slice(atIndex + 1);
-    return isValidLocalPart(local) && isValidDomainPart(domain);
-}
-
-function extractEmailRecipients(content: string) {
-    const recipients = new Set<string>();
-    const tokens = content.split(/[\s<>()\[\]{}"',;]+/);
-
-    for (const rawToken of tokens) {
-        if (!rawToken || !rawToken.includes("@")) {
-            continue;
-        }
-
-        const token = stripEmailToken(rawToken);
-        if (!token) {
-            continue;
-        }
-
-        if (isLikelyEmail(token)) {
-            recipients.add(token.toLowerCase());
-        }
-    }
-
-    return [...recipients];
-}
-
-function extractMeetingHints(content: string) {
-    const normalized = normalizeContent(content);
-    const whenMatch = normalized.match(/\b(?:today|tomorrow|tonight|next week|next month|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}(?::\d{2})?\s?(?:am|pm)?(?:\s?[A-Z]{2,4})?)\b/i);
-    const withMatch = normalized.match(/\bwith\s+([^.,;]+)/i);
-
-    return {
-        whenText: whenMatch?.[0] ?? null,
-        attendeesText: withMatch?.[1]?.trim() ?? null,
-    };
-}
-
-function inferExplicitAction(content: string): TaskExecutionActionType | null {
-    const normalized = normalizeContent(content).toLowerCase();
-    const emailRecipients = extractEmailRecipients(content);
-    const hasGithubBug = hasAnyTerm(normalized, GITHUB_BUG_KEYWORDS);
-    const hasGithubIntent = hasAnyTerm(normalized, GITHUB_INTENT_KEYWORDS);
-
-    if (hasGithubBug && hasGithubIntent) {
-        return "create_github_issue";
-    }
-
-    if (emailRecipients.length > 0 || hasAnyTerm(normalized, EMAIL_INTENT_KEYWORDS)) {
-        return "send_email";
-    }
-
-    if (hasAnyTerm(normalized, MEETING_INTENT_KEYWORDS)) {
-        return "schedule_meeting";
-    }
-
-    return null;
-}
-
-function computeNeedsApproval(actionType: TaskExecutionActionType, confidence: number, parameters: Record<string, unknown>) {
-    if (actionType === "send_email") {
-        const recipients = Array.isArray(parameters.to)
-            ? parameters.to.filter((value): value is string => typeof value === "string" && isValidEmail(value))
-            : typeof parameters.to === "string" && isValidEmail(parameters.to)
-                ? [parameters.to]
-                : [];
-
-        if (recipients.length > 0) {
-            return false;
-        }
-    }
-
-    return confidence < 0.7;
-}
-
-function finalizeExecutionDecision(decision: TaskExecutionDecision): TaskExecutionDecision {
-    const normalizedConfidence = decision.actionType !== "none"
-        ? Math.max(clampConfidence(decision.confidence, 0.5), 0.85)
-        : clampConfidence(decision.confidence, 0.5);
-
-    return {
-        ...decision,
-        confidence: normalizedConfidence,
-        needsApproval: computeNeedsApproval(decision.actionType, normalizedConfidence, decision.parameters),
-    };
-}
-
-function normalizeExecutionParameters(
-    content: string,
-    decision: TaskExecutionDecision,
-    options?: { allowHeuristicActionFallback?: boolean }
-): TaskExecutionDecision {
-    const explicitAction = inferExplicitAction(content);
-    const actionType = decision.actionType !== "none"
-        ? decision.actionType
-        : options?.allowHeuristicActionFallback
-            ? (explicitAction ?? "none")
-            : "none";
-    const emailRecipients = extractEmailRecipients(content);
-    const meetingHints = extractMeetingHints(content);
-    const baseTitle = toTaskTitle(content);
-
-    if (actionType === "send_email") {
-        const polished = buildEmailCopy(content, baseTitle);
-        const toValue = decision.parameters.to;
-        const to = Array.isArray(toValue)
-            ? toValue.filter((value): value is string => typeof value === "string" && value.length > 0)
-            : typeof toValue === "string"
-                ? [toValue]
-                : emailRecipients;
-        const strictTemplate = buildStrictEmailTemplate(content, baseTitle, to);
-
-        const rawSubject = typeof decision.parameters.subject === "string" ? normalizeContent(decision.parameters.subject).toLowerCase() : "";
-        const rawBody = typeof decision.parameters.body === "string" ? normalizeContent(decision.parameters.body).toLowerCase() : "";
-        const normalizedContent = normalizeContent(content).toLowerCase();
-
-        const shouldRewriteSubject =
-            rawSubject.length === 0
-            || rawSubject === normalizeContent(baseTitle).toLowerCase()
-            || rawSubject.startsWith("send an email")
-            || rawSubject.includes(" saying ");
-
-        const shouldRewriteBody =
-            rawBody.length === 0
-            || rawBody === normalizedContent
-            || rawBody.startsWith("send an email")
-            || rawBody.includes(" saying ");
-
-        return finalizeExecutionDecision({
-            ...decision,
-            actionType,
-            parameters: {
-                ...decision.parameters,
-                to,
-                subject: STRICT_EMAIL_TEMPLATE_MODE
-                    ? strictTemplate.subject
-                    : (shouldRewriteSubject ? polished.subject : decision.parameters.subject),
-                body: STRICT_EMAIL_TEMPLATE_MODE
-                    ? strictTemplate.body
-                    : (shouldRewriteBody ? polished.body : decision.parameters.body),
-            },
-            confidence: Math.max(decision.confidence, to.length > 0 ? 0.9 : 0.8),
-            needsApproval: false,
-        });
-    }
-
-    if (actionType === "schedule_meeting") {
-        const strictMeeting = buildStrictMeetingTemplate(content, baseTitle, meetingHints);
-        return finalizeExecutionDecision({
-            ...decision,
-            actionType,
-            parameters: {
-                ...decision.parameters,
-                summary: STRICT_ACTION_TEMPLATE_MODE
-                    ? strictMeeting.summary
-                    : (typeof decision.parameters.summary === "string" ? decision.parameters.summary : baseTitle),
-                notes: STRICT_ACTION_TEMPLATE_MODE
-                    ? strictMeeting.notes
-                    : (typeof decision.parameters.notes === "string" ? decision.parameters.notes : content),
-                whenText: STRICT_ACTION_TEMPLATE_MODE
-                    ? strictMeeting.whenText
-                    : (typeof decision.parameters.whenText === "string" ? decision.parameters.whenText : meetingHints.whenText),
-                attendeesText: STRICT_ACTION_TEMPLATE_MODE
-                    ? strictMeeting.attendeesText
-                    : (typeof decision.parameters.attendeesText === "string" ? decision.parameters.attendeesText : meetingHints.attendeesText),
-            },
-            confidence: Math.max(decision.confidence, 0.78),
-            needsApproval: false,
-        });
-    }
-
-    if (actionType === "create_github_issue") {
-        const strictIssue = buildStrictGithubIssueTemplate(content, baseTitle);
-        return finalizeExecutionDecision({
-            ...decision,
-            actionType,
-            parameters: {
-                ...decision.parameters,
-                title: STRICT_ACTION_TEMPLATE_MODE
-                    ? strictIssue.title
-                    : (typeof decision.parameters.title === "string" ? decision.parameters.title : baseTitle),
-                body: STRICT_ACTION_TEMPLATE_MODE
-                    ? strictIssue.body
-                    : (typeof decision.parameters.body === "string" ? decision.parameters.body : content),
-            },
-            confidence: Math.max(decision.confidence, 0.7),
-            needsApproval: false,
-        });
-    }
-
-    return finalizeExecutionDecision({
-        ...decision,
-        actionType,
-    });
-}
-
-function buildActionSummary(actionType: TaskExecutionActionType, parameters: Record<string, unknown>) {
-    switch (actionType) {
-        case "send_email":
-            return `Requested email to ${Array.isArray(parameters.to) ? parameters.to.join(", ") : "unknown recipient"}.`;
-        case "schedule_meeting":
-            return "Requested meeting scheduling action.";
-        case "create_github_issue":
-            return "Requested GitHub issue creation action.";
-        case "none":
-        default:
-            return "No executable action selected.";
-    }
-}
-
-function decideExecutionActionFromHeuristics(content: string): TaskExecutionDecision {
-    const normalized = normalizeContent(content).toLowerCase();
-
-    const explicitAction = inferExplicitAction(content);
-    if (explicitAction === "create_github_issue") {
-        return {
-            actionType: "create_github_issue",
-            parameters: {
-                title: toTaskTitle(content),
-                body: content,
-            },
-            confidence: 0.78,
-            needsApproval: false,
-        };
-    }
-
-    if (explicitAction === "schedule_meeting") {
-        return {
-            actionType: "schedule_meeting",
-            parameters: {
-                summary: toTaskTitle(content),
-                notes: content,
-                ...extractMeetingHints(content),
-            },
-            confidence: 0.76,
-            needsApproval: false,
-        };
-    }
-
-    if (explicitAction === "send_email") {
-        return {
-            actionType: "send_email",
-            parameters: {
-                to: extractEmailRecipients(content),
-                subject: toTaskTitle(content),
-                body: content,
-            },
-            confidence: 0.86,
-            needsApproval: false,
-        };
-    }
-
-    const isScheduling = ["schedule", "meeting", "calendar", "call", "sync", "book"].some((term) =>
-        normalized.includes(term)
-    );
-
-    if (isScheduling) {
-        return {
-            actionType: "schedule_meeting",
-            parameters: {
-                summary: toTaskTitle(content),
-                notes: content,
-                ...extractMeetingHints(content),
-            },
-            confidence: 0.7,
-            needsApproval: false,
-        };
-    }
-
-    const isEmail = ["email", "mail", "send this", "send an update", "notify"].some((term) =>
-        normalized.includes(term)
-    );
-
-    if (isEmail) {
-        return {
-            actionType: "send_email",
-            parameters: {
-                to: extractEmailRecipients(content),
-                subject: toTaskTitle(content),
-                body: content,
-            },
-            confidence: 0.68,
-            needsApproval: false,
-        };
-    }
-
-    return {
-        actionType: "none",
-        parameters: {},
-        confidence: 0.5,
-        needsApproval: false,
-    };
-}
-
-async function classifyMessageWithLLM(content: string): Promise<IntelligenceDecision> {
-    const apiKey = process.env.OPENAI_API_KEY;
-    const fallbackClassification = classifyMessage(content);
-    const fallbackExecution = decideExecutionActionFromHeuristics(content);
-
-    if (!apiKey) {
-        const normalizedFallbackExecution = normalizeExecutionParameters(content, fallbackExecution);
-        const fallbackSemanticType = normalizedFallbackExecution.actionType !== "none"
-            ? "task"
-            : fallbackClassification.semanticType;
-        return {
-            classification: {
-                semanticType: fallbackSemanticType,
-                confidence: fallbackSemanticType === "task"
-                    ? Math.max(fallbackClassification.confidence, 0.85)
-                    : fallbackClassification.confidence,
-            },
-            execution: normalizedFallbackExecution,
-            taskDraft: normalizeTaskDraft(content, null),
-        };
-    }
-
-    const toolPromptLines = buildExecutionToolPromptLines();
-    const response = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-            model: "gpt-4.1-mini",
-            input: [
-                {
-                    role: "system",
-                    content:
-                        [
-                            "You are a task intelligence router.",
-                            "Classify the message semantic intent and the most likely executable action.",
-                            "If the message explicitly requests email delivery, choose send_email even if it also mentions fixing a bug.",
-                            "If the message explicitly requests scheduling, choose schedule_meeting.",
-                            "Extract useful parameters:",
-                            ...toolPromptLines,
-                            "Also produce taskTitle and taskDescription suitable for a task board.",
-                            "taskTitle must be concise and actionable (max 120 chars).",
-                            "taskDescription must be clear and professional with concrete outcome.",
-                            "Return strict JSON only with: semanticType, confidence, actionType, parameters, needsApproval, taskTitle, taskDescription.",
-                            `actionType must be one of ${EXECUTION_ACTION_ENUM.join(", ")}.`,
-                        ].join(" "),
-                },
-                { role: "user", content },
-            ],
-            // keep output constrained for deterministic parsing
-            text: {
-                format: {
-                    type: "json_schema",
-                    name: "task_intent_and_action",
-                    schema: {
-                        type: "object",
-                        properties: {
-                            semanticType: {
-                                type: "string",
-                                enum: ["task", "chat", "decision", "reminder", "unknown"],
-                            },
-                            confidence: { type: "number", minimum: 0, maximum: 1 },
-                            actionType: {
-                                type: "string",
-                                enum: EXECUTION_ACTION_ENUM,
-                            },
-                            parameters: {
-                                type: "object",
-                                additionalProperties: true,
-                            },
-                            needsApproval: { type: "boolean" },
-                            taskTitle: { type: "string", minLength: 3, maxLength: 200 },
-                            taskDescription: { type: "string", minLength: 3, maxLength: 8000 },
-                        },
-                        required: ["semanticType", "confidence", "actionType", "parameters", "needsApproval", "taskTitle", "taskDescription"],
-                        additionalProperties: false,
-                    },
-                },
-            },
-        }),
-    });
-
-    if (!response.ok) {
-        const normalizedFallbackExecution = normalizeExecutionParameters(content, fallbackExecution, {
-            allowHeuristicActionFallback: true,
-        });
-        const fallbackSemanticType = normalizedFallbackExecution.actionType !== "none"
-            ? "task"
-            : fallbackClassification.semanticType;
-        return {
-            classification: {
-                semanticType: fallbackSemanticType,
-                confidence: fallbackSemanticType === "task"
-                    ? Math.max(fallbackClassification.confidence, 0.85)
-                    : fallbackClassification.confidence,
-            },
-            execution: normalizedFallbackExecution,
-            taskDraft: normalizeTaskDraft(content, null),
-        };
-    }
-
-    try {
-        const payload = await response.json();
-        const jsonText =
-            payload?.output_text ??
-            payload?.output?.[0]?.content?.[0]?.text ??
-            "{}";
-
-        const parsed = JSON.parse(jsonText) as LlmDecision;
-        const llmExecution: TaskExecutionDecision = {
-            actionType: parsed.actionType,
-            parameters: parsed.parameters && typeof parsed.parameters === "object" ? parsed.parameters : {},
-            confidence: clampConfidence(parsed.confidence, fallbackExecution.confidence),
-            needsApproval: Boolean(parsed.needsApproval),
-        };
-        const normalizedExecution = parsed.actionType === "none"
-            ? normalizeExecutionParameters(content, fallbackExecution, { allowHeuristicActionFallback: true })
-            : normalizeExecutionParameters(content, llmExecution, { allowHeuristicActionFallback: false });
-        const taskDraft = normalizeTaskDraft(content, {
-            title: parsed.taskTitle,
-            description: parsed.taskDescription,
-        });
-        const semanticType = normalizedExecution.actionType !== "none"
-            ? "task"
-            : parsed.semanticType;
-        const semanticConfidence = semanticType === "task"
-            ? Math.max(clampConfidence(parsed.confidence, fallbackClassification.confidence), 0.85)
-            : clampConfidence(parsed.confidence, fallbackClassification.confidence);
-
-        return {
-            classification: {
-                semanticType,
-                confidence: semanticConfidence,
-            },
-            execution: normalizedExecution,
-            taskDraft,
-        };
-    } catch {
-        const normalizedFallbackExecution = normalizeExecutionParameters(content, fallbackExecution, {
-            allowHeuristicActionFallback: true,
-        });
-        const fallbackSemanticType = normalizedFallbackExecution.actionType !== "none"
-            ? "task"
-            : fallbackClassification.semanticType;
-        return {
-            classification: {
-                semanticType: fallbackSemanticType,
-                confidence: fallbackSemanticType === "task"
-                    ? Math.max(fallbackClassification.confidence, 0.85)
-                    : fallbackClassification.confidence,
-            },
-            execution: normalizedFallbackExecution,
-            taskDraft: normalizeTaskDraft(content, null),
-        };
-    }
-}
-
-function toTaskTitle(content: string) {
-    const normalized = normalizeContent(content);
-    if (!normalized) return "Follow up";
-
-    const withoutPrefix = normalized.replace(/^(@\w+[:,]?\s*)+/, "");
-    const trimmed = withoutPrefix.slice(0, 200);
-    if (trimmed.length >= 3) return trimmed;
-
-    return normalized.slice(0, 200);
 }
 
 export async function processMessageTaskIntelligence(
@@ -877,14 +86,13 @@ export async function processMessageTaskIntelligence(
         return null;
     }
 
-    const decision = await classifyMessageWithLLM(input.content);
-    const classification = decision.classification;
     const processedAt = new Date();
+    const preprocessed = preprocessMessage(input.content);
 
-    if (classification.semanticType !== "task") {
+    if (!preprocessed.normalized) {
         await updateMessageSemanticState(input.messageId, {
-            semanticType: classification.semanticType,
-            semanticConfidence: classification.confidence,
+            semanticType: "chat",
+            semanticConfidence: 0,
             aiStatus: "classified",
             aiVersion: AI_VERSION,
             linkedTaskIds: [],
@@ -895,8 +103,8 @@ export async function processMessageTaskIntelligence(
             semanticPayload: {
                 messageId: input.messageId,
                 conversationId: input.conversationId,
-                semanticType: classification.semanticType,
-                semanticConfidence: classification.confidence,
+                semanticType: "chat",
+                semanticConfidence: 0,
                 aiStatus: "classified",
                 aiVersion: AI_VERSION,
                 linkedTaskIds: [],
@@ -905,11 +113,9 @@ export async function processMessageTaskIntelligence(
         };
     }
 
-    const draft = normalizeTaskDraft(input.content, decision.taskDraft);
-    const title = draft.title;
     const dedupeKey = deriveTaskDedupeKey({
         conversationId: input.conversationId,
-        title,
+        title: preprocessed.title,
         sourceMessageId: input.messageId,
     });
 
@@ -918,16 +124,16 @@ export async function processMessageTaskIntelligence(
     const task = await upsertTaskByDedupeKey({
         conversationId: input.conversationId,
         parentTaskId: null,
-        title,
-        description: draft.description,
+        title: preprocessed.title,
+        description: preprocessed.description,
         assignees: [],
         dueAt: null,
         priority: "medium",
         source: "ai",
         sourceMessageIds: [input.messageId],
         latestContextMessageId: input.messageId,
-        confidence: classification.confidence,
-        tags: [],
+        confidence: 0.9,
+        tags: ["preprocessed"],
         dedupeKey,
         createdBy: input.senderId,
         subTasks: [],
@@ -951,64 +157,71 @@ export async function processMessageTaskIntelligence(
 
     await updateMessageSemanticState(input.messageId, {
         semanticType: "task",
-        semanticConfidence: classification.confidence,
+        semanticConfidence: 0.9,
         aiStatus: "classified",
         aiVersion: AI_VERSION,
         linkedTaskIds: [task._id.toString()],
         semanticProcessedAt: processedAt,
     });
 
-    if (decision.execution.actionType !== "none") {
-        await enqueueOutboxEvent({
-            topic: "task.execution.requested",
-            dedupeKey: `task.execution.requested:${task._id.toString()}:${input.messageId}:${decision.execution.actionType}`,
-            payload: {
-                taskId: task._id.toString(),
-                conversationId: input.conversationId,
-                triggerMessageId: input.messageId,
-                requestedByType: "agent",
-                requestedById: null,
-                actionType: decision.execution.actionType,
-                parameters: decision.execution.parameters,
-                confidence: decision.execution.confidence,
-                needsApproval: decision.execution.needsApproval,
-            },
-        });
-
-        try {
-            await createTaskAction({
-                taskId: task._id.toString(),
-                conversationId: input.conversationId,
-                actorType: "agent",
-                actorId: null,
-                actionType: decision.execution.actionType,
-                toolName: decision.execution.actionType,
+    await enqueueOutboxEvent({
+        topic: "task.execution.requested",
+        dedupeKey: `task.execution.requested:${task._id.toString()}:${input.messageId}:none`,
+        payload: {
+            taskId: task._id.toString(),
+            conversationId: input.conversationId,
+            triggerMessageId: input.messageId,
+            requestedByType: "agent",
+            requestedById: null,
+            actionType: "none",
+            parameters: {
                 messageId: input.messageId,
-                parameters: decision.execution.parameters,
-                executionState: "requested",
-                summary: buildActionSummary(decision.execution.actionType, decision.execution.parameters),
-                error: null,
-                patch: {
-                    before: null,
-                    after: {
-                        actionType: decision.execution.actionType,
-                        parameters: decision.execution.parameters,
-                        confidence: decision.execution.confidence,
-                        needsApproval: decision.execution.needsApproval,
-                    },
+                content: preprocessed.normalized,
+                titleHint: preprocessed.title,
+                descriptionHint: preprocessed.description,
+            },
+            confidence: 1,
+            needsApproval: false,
+        },
+    });
+
+    try {
+        await createTaskAction({
+            taskId: task._id.toString(),
+            conversationId: input.conversationId,
+            actorType: "agent",
+            actorId: null,
+            actionType: "none",
+            toolName: "none",
+            messageId: input.messageId,
+            parameters: {
+                messageId: input.messageId,
+                content: preprocessed.normalized,
+                titleHint: preprocessed.title,
+                descriptionHint: preprocessed.description,
+            },
+            executionState: "requested",
+            summary: "Autonomous execution requested from preprocessed message context.",
+            error: null,
+            patch: {
+                before: null,
+                after: {
+                    actionType: "none",
+                    toolName: "none",
+                    source: "task-intelligence-preprocess",
                 },
-                reason: "Automatic action request from message",
-                idempotencyKey: buildTaskActionIdempotencyKey(
-                    task._id.toString(),
-                    `requested:${decision.execution.actionType}`,
-                    input.messageId
-                ),
-            });
-        } catch (error) {
-            const maybeMongoError = error as { code?: number };
-            if (maybeMongoError?.code !== 11000) {
-                throw error;
-            }
+            },
+            reason: "Preprocessed task delegated to autonomous agent runner",
+            idempotencyKey: buildTaskActionIdempotencyKey(
+                task._id.toString(),
+                "requested:none",
+                input.messageId
+            ),
+        });
+    } catch (error) {
+        const maybeMongoError = error as { code?: number };
+        if (maybeMongoError?.code !== 11000) {
+            throw error;
         }
     }
 
@@ -1024,7 +237,7 @@ export async function processMessageTaskIntelligence(
                 before: preExistingTask ? { latestContextMessageId: null } : null,
                 after: { latestContextMessageId: input.messageId },
             },
-            reason: "Automatic task extraction from message",
+            reason: "Message preprocessing linked message to task",
             idempotencyKey: buildTaskActionIdempotencyKey(
                 task._id.toString(),
                 preExistingTask ? "linked_message" : "created",
@@ -1032,7 +245,6 @@ export async function processMessageTaskIntelligence(
             ),
         });
     } catch (error) {
-        // Duplicate key errors can happen on retries and are safe to ignore.
         const maybeMongoError = error as { code?: number };
         if (maybeMongoError?.code !== 11000) {
             throw error;
@@ -1043,7 +255,7 @@ export async function processMessageTaskIntelligence(
         messageId: input.messageId,
         conversationId: input.conversationId,
         semanticType: "task",
-        semanticConfidence: classification.confidence,
+        semanticConfidence: 0.9,
         aiStatus: "classified",
         aiVersion: AI_VERSION,
         linkedTaskIds: [task._id.toString()],

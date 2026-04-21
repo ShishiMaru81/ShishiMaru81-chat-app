@@ -49,9 +49,9 @@ export function evaluateExecutionPolicy(payload: RequestedPayload): ExecutionPol
 
     if (payload.actionType === "none") {
         return {
-            outcome: "blocked",
-            riskLevel: "high",
-            reasons: ["No executable action type was selected."],
+            outcome: "auto_execute",
+            riskLevel: "low",
+            reasons: ["Autonomous mode: agent-runner will decide the next tool."],
         };
     }
 
