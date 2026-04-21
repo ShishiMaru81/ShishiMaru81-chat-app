@@ -63,6 +63,19 @@ type VerificationOutcome = {
     validationLog?: TaskValidationLog;
 };
 
+type AvailableToolForDecision = {
+    name: string;
+    description: string;
+    inputSchema: unknown;
+};
+
+type NextActionDecision = {
+    toolName: string;
+    toolInput: Record<string, unknown>;
+    reasoning?: string;
+    goalAchieved?: boolean;
+};
+
 type LoopContext = {
     task: TaskDocumentLike;
     action: ExecutionActionRecord;
@@ -209,21 +222,120 @@ export class AgentRunner {
         };
     }
 
-    private resolveResumeStep(task: TaskDocumentLike): "execute" | "adjust" {
-        const checkpoints = task.checkpoints ?? [];
-        if (checkpoints.length === 0) {
-            return "execute";
+    private async decideNextAction(
+        task: TaskDocumentLike,
+        executionHistory: TaskExecutionHistory,
+        availableTools: AvailableToolForDecision[]
+    ): Promise<NextActionDecision> {
+        const apiKey = process.env.OPENAI_API_KEY;
+        const fallbackTool = availableTools.find((tool) => tool.name === "send_email") ?? availableTools[0];
+
+        if (!fallbackTool) {
+            return {
+                toolName: "none",
+                toolInput: {},
+                reasoning: "No available tools were registered.",
+                goalAchieved: false,
+            };
         }
 
-        const last = checkpoints[checkpoints.length - 1];
-        if (last.step === "verify" && last.status === "failed") {
-            return "adjust";
-        }
-        if (last.step === "adjust" && (last.status === "started" || last.status === "completed")) {
-            return "adjust";
+        if (!apiKey) {
+            return {
+                toolName: fallbackTool.name,
+                toolInput: {},
+                reasoning: "OPENAI_API_KEY is not configured; using fallback tool selection.",
+                goalAchieved: false,
+            };
         }
 
-        return "execute";
+        const baseUrl = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+        const model = process.env.TASK_AGENT_MODEL || "gpt-4.1-mini";
+
+        const response = await fetch(`${baseUrl.replace(/\/$/, "")}/responses`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+                model,
+                input: [
+                    {
+                        role: "system",
+                        content: [
+                            "You are an execution-first task agent.",
+                            "Given task state and available tools, decide the single best next tool call.",
+                            "Return strict JSON with: toolName, toolInput, reasoning, goalAchieved.",
+                            "Set goalAchieved=true only when no further action is required.",
+                        ].join(" "),
+                    },
+                    {
+                        role: "user",
+                        content: JSON.stringify({
+                            task: {
+                                id: task._id.toString(),
+                                title: task.title,
+                                description: task.description,
+                                status: task.status,
+                                progress: typeof task.progress === "number" ? task.progress : 0,
+                                result: task.result ?? null,
+                            },
+                            executionHistory,
+                            availableTools,
+                        }),
+                    },
+                ],
+                text: {
+                    format: {
+                        type: "json_schema",
+                        name: "next_action_decision",
+                        schema: {
+                            type: "object",
+                            properties: {
+                                toolName: { type: "string" },
+                                toolInput: { type: "object", additionalProperties: true },
+                                reasoning: { type: "string" },
+                                goalAchieved: { type: "boolean" },
+                            },
+                            required: ["toolName", "toolInput", "goalAchieved"],
+                            additionalProperties: false,
+                        },
+                    },
+                },
+            }),
+        });
+
+        if (!response.ok) {
+            return {
+                toolName: fallbackTool.name,
+                toolInput: {},
+                reasoning: `LLM request failed with status ${response.status}; using fallback tool.`,
+                goalAchieved: false,
+            };
+        }
+
+        try {
+            const payload = await response.json();
+            const jsonText = payload?.output_text ?? payload?.output?.[0]?.content?.[0]?.text ?? "{}";
+            const parsed = JSON.parse(jsonText) as Partial<NextActionDecision>;
+
+            const requestedTool = typeof parsed.toolName === "string" ? parsed.toolName : fallbackTool.name;
+            const selectedTool = availableTools.find((tool) => tool.name === requestedTool) ?? fallbackTool;
+
+            return {
+                toolName: selectedTool.name,
+                toolInput: parsed.toolInput && typeof parsed.toolInput === "object" ? parsed.toolInput : {},
+                reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : undefined,
+                goalAchieved: Boolean(parsed.goalAchieved),
+            };
+        } catch {
+            return {
+                toolName: fallbackTool.name,
+                toolInput: {},
+                reasoning: "LLM response parsing failed; using fallback tool.",
+                goalAchieved: false,
+            };
+        }
     }
 
     private progressForStep(step: "execute" | "observe" | "verify" | "adjust" | "done" | "failed", status: "started" | "completed" | "failed") {
@@ -329,15 +441,15 @@ export class AgentRunner {
             observed: null,
             verification: null,
         };
-
-        let resumeStep = this.resolveResumeStep(task);
+        const availableTools = this.toolRegistry.listForLLM();
+        const maxIterations = Math.max(1, Number(process.env.TASK_AGENT_MAX_ITERATIONS || 5));
 
         console.log("agent-runner lifecycle:start", {
             taskId,
             toolName: context.action.toolName,
             retryCount: context.retryCount,
             maxRetries: context.maxRetries,
-            resumeStep,
+            maxIterations,
         });
 
         await this.updateTask(task, {
@@ -346,34 +458,57 @@ export class AgentRunner {
             maxRetries: context.maxRetries,
         });
 
-        while (context.retryCount < context.maxRetries && task.status !== "completed") {
+        for (let iteration = 0; iteration < maxIterations && task.status !== "completed"; iteration += 1) {
             console.log("agent-runner lifecycle:loop", {
                 taskId,
-                toolName: context.attemptPayload.toolName,
-                retryCount: context.retryCount,
-                maxRetries: context.maxRetries,
+                iteration: iteration + 1,
+                maxIterations,
             });
 
             try {
-                if (resumeStep === "adjust") {
-                    await this.appendCheckpoint(task, {
-                        step: "adjust",
-                        status: "started",
-                    });
-
-                    const resumedAdjustment = await this.adjust(
-                        context,
-                        context.observed,
-                        context.verification ?? { success: false, confidence: 0 }
-                    );
-                    context.attemptPayload = resumedAdjustment;
-
-                    await this.appendCheckpoint(task, {
-                        step: "adjust",
+                const decision = await this.decideNextAction(task, this.getExecutionHistory(task), availableTools);
+                if (decision.goalAchieved) {
+                    await this.updateTask(task, {
                         status: "completed",
+                        progress: 100,
+                        result: {
+                            success: true,
+                            confidence: context.verification?.confidence ?? 1,
+                            evidence: {
+                                decision,
+                                execution: context.observed?.evidence ?? null,
+                            },
+                        },
                     });
 
-                    resumeStep = "execute";
+                    await this.appendCheckpoint(task, {
+                        step: "done",
+                        status: "completed",
+                        progress: 100,
+                    });
+
+                    return {
+                        completed: true,
+                        retryCount: context.retryCount,
+                        maxRetries: context.maxRetries,
+                        result: context.observed,
+                        verification: context.verification,
+                    };
+                }
+
+                context.attemptPayload = {
+                    ...context.attemptPayload,
+                    toolName: decision.toolName,
+                    parameters: decision.toolInput,
+                };
+                context.action = context.attemptPayload;
+
+                if (decision.reasoning) {
+                    console.log("agent-runner step:decide", {
+                        taskId,
+                        toolName: decision.toolName,
+                        reasoning: decision.reasoning,
+                    });
                 }
 
                 await this.appendCheckpoint(task, {
@@ -473,58 +608,12 @@ export class AgentRunner {
                     };
                 }
 
-                if (context.retryCount >= context.maxRetries - 1) {
-                    await this.updateTask(task, {
-                        status: "failed",
-                        retryCount: context.retryCount + 1,
-                        maxRetries: context.maxRetries,
-                        result: {
-                            success: false,
-                            confidence: context.verification.confidence,
-                            evidence: {
-                                execution: context.observed.evidence,
-                                validationLog: context.verification.validationLog,
-                            },
-                            error: "Verification failed and retries exhausted.",
-                        },
-                    });
-                    console.log("agent-runner lifecycle:failed", {
-                        taskId,
-                        retryCount: context.retryCount + 1,
-                        maxRetries: context.maxRetries,
-                        confidence: context.verification.confidence,
-                    });
-                    return {
-                        completed: false,
-                        retryCount: context.retryCount + 1,
-                        maxRetries: context.maxRetries,
-                        result: context.observed,
-                        verification: context.verification,
-                    };
-                }
-
-                await this.appendCheckpoint(task, {
-                    step: "adjust",
-                    status: "started",
-                });
-
-                const adjusted = await this.adjust(context, context.observed, context.verification);
-
-                await this.appendCheckpoint(task, {
-                    step: "adjust",
-                    status: "completed",
-                });
-
-                context.attemptPayload = adjusted;
                 context.retryCount += 1;
-                resumeStep = "execute";
 
-                console.warn("agent-runner lifecycle:retry", {
+                console.warn("agent-runner lifecycle:continue", {
                     taskId,
-                    retryCount: context.retryCount,
-                    maxRetries: context.maxRetries,
+                    iteration: iteration + 1,
                     reason: context.observed.error ?? "verification failed",
-                    adjustment: adjusted.parameters,
                 });
 
                 await this.updateTask(task, {
@@ -532,10 +621,6 @@ export class AgentRunner {
                     retryCount: context.retryCount,
                     maxRetries: context.maxRetries,
                 });
-
-                if (context.retryCount < context.maxRetries) {
-                    await wait(this.getBackoffDelay(context.retryCount));
-                }
             } catch (error) {
                 const reason = error instanceof Error ? error.message : "unknown execution error";
 
@@ -553,60 +638,13 @@ export class AgentRunner {
                     },
                 });
 
-                if (context.retryCount >= context.maxRetries - 1) {
-                    await this.updateTask(task, {
-                        status: "failed",
-                        retryCount: context.retryCount + 1,
-                        maxRetries: context.maxRetries,
-                        progress: 100,
-                        result: {
-                            success: false,
-                            confidence: 0,
-                            evidence: {
-                                phase: "execute",
-                                reason,
-                            },
-                            error: reason,
-                        },
-                    });
-
-                    await this.appendCheckpoint(task, {
-                        step: "failed",
-                        status: "completed",
-                        progress: 100,
-                    });
-
-                    console.error("agent-runner lifecycle:terminal-failure", {
-                        taskId,
-                        reason,
-                        retryCount: context.retryCount + 1,
-                        maxRetries: context.maxRetries,
-                    });
-                    throw error;
-                }
-
-                await this.appendCheckpoint(task, {
-                    step: "adjust",
-                    status: "started",
-                });
-
-                const adjusted = await this.adjust(context, context.observed, { success: false, confidence: 0 });
-
-                await this.appendCheckpoint(task, {
-                    step: "adjust",
-                    status: "completed",
-                });
-
-                context.attemptPayload = adjusted;
                 context.retryCount += 1;
-                resumeStep = "execute";
 
-                console.warn("agent-runner lifecycle:retry-after-error", {
+                console.warn("agent-runner lifecycle:iteration-error", {
                     taskId,
+                    reason,
                     retryCount: context.retryCount,
                     maxRetries: context.maxRetries,
-                    reason,
-                    adjustment: adjusted.parameters,
                 });
 
                 await this.updateTask(task, {
@@ -614,8 +652,6 @@ export class AgentRunner {
                     retryCount: context.retryCount,
                     maxRetries: context.maxRetries,
                 });
-
-                await wait(this.getBackoffDelay(context.retryCount));
             }
         }
 
@@ -628,7 +664,7 @@ export class AgentRunner {
                 success: false,
                 confidence: context.verification?.confidence ?? 0,
                 evidence: context.observed?.evidence ?? null,
-                error: "Retries exhausted.",
+                error: "Max iterations reached before goal achievement.",
             },
         });
 
@@ -642,6 +678,7 @@ export class AgentRunner {
             taskId,
             retryCount: context.retryCount,
             maxRetries: context.maxRetries,
+            maxIterations,
         });
 
         return {
