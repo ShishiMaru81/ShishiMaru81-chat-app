@@ -105,6 +105,18 @@ type RunTaskOutcome = {
     verification: VerificationOutcome | null;
 };
 
+type LatestExecutionTaskAction = {
+    taskId: { toString(): string };
+    conversationId: { toString(): string };
+    actionType: string;
+    toolName?: string | null;
+    parameters?: Record<string, unknown> | null;
+    messageId?: { toString(): string } | null;
+    executionState?: string | null;
+};
+
+type GetLatestExecutionTaskAction = (taskId: string) => Promise<LatestExecutionTaskAction | null>;
+
 type ExecutionHistoryDelta = {
     attempts?: number;
     failures?: number;
@@ -144,7 +156,7 @@ function resolveTaskModel(moduleNs: unknown): TaskModelLike {
 
 function resolveGetLatestExecutionTaskAction(
     moduleNs: unknown
-): (taskId: string) => Promise<{ taskId: { toString(): string }; conversationId: { toString(): string }; actionType: string; toolName?: string | null; parameters?: Record<string, unknown> | null; messageId?: { toString(): string } | null; executionState?: string | null } | null> {
+): GetLatestExecutionTaskAction {
     const asRecord = moduleNs as Record<string, unknown>;
     const defaultExport = asRecord?.default as Record<string, unknown> | undefined;
     const candidates: unknown[] = [
@@ -154,7 +166,7 @@ function resolveGetLatestExecutionTaskAction(
 
     for (const candidate of candidates) {
         if (typeof candidate === "function") {
-            return candidate as (taskId: string) => Promise<{ taskId: { toString(): string }; conversationId: { toString(): string }; actionType: string; toolName?: string | null; parameters?: Record<string, unknown> | null; messageId?: { toString(): string } | null; executionState?: string | null } | null>;
+            return candidate as GetLatestExecutionTaskAction;
         }
     }
 
@@ -171,6 +183,7 @@ export class AgentRunner {
     private readonly toolRegistry: ToolRegistry;
     private readonly taskSuccessRegistry: TaskSuccessRegistry;
     private readonly internalBaseUrl: string;
+    private readonly getLatestExecutionTaskAction: GetLatestExecutionTaskAction;
 
     constructor(options?: {
         retryManager?: RetryManager;
@@ -178,12 +191,14 @@ export class AgentRunner {
         toolRegistry?: ToolRegistry;
         taskSuccessRegistry?: TaskSuccessRegistry;
         internalBaseUrl?: string;
+        getLatestExecutionTaskAction?: GetLatestExecutionTaskAction;
     }) {
         this.retryManager = options?.retryManager ?? new RetryManager([1000, 2000, 5000]);
         this.taskModel = options?.taskModel ?? resolveTaskModel(taskModule);
         this.toolRegistry = options?.toolRegistry ?? this.createDefaultToolRegistry();
         this.taskSuccessRegistry = options?.taskSuccessRegistry ?? createDefaultTaskSuccessRegistry();
         this.internalBaseUrl = options?.internalBaseUrl ?? process.env.SOCKET_SERVER_URL ?? process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:3001";
+        this.getLatestExecutionTaskAction = options?.getLatestExecutionTaskAction ?? resolveGetLatestExecutionTaskAction(taskRepo);
     }
 
     private createDefaultToolRegistry() {
@@ -444,8 +459,7 @@ export class AgentRunner {
             throw new Error(`Task not found: ${taskId}`);
         }
 
-        const getLatestExecutionTaskAction = resolveGetLatestExecutionTaskAction(taskRepo);
-        const action = await getLatestExecutionTaskAction(taskId);
+        const action = await this.getLatestExecutionTaskAction(taskId);
         if (!action) {
             throw new Error(`No execution action found for task: ${taskId}`);
         }
