@@ -40,7 +40,7 @@ export async function connectToDatabase(): Promise<Mongoose> {
 
     return cached.conn;
 }
-import { User } from "@/models/User";
+import { User } from "@chat/db/models/User";
 
 export interface UserFromDatabase {
     id: string;

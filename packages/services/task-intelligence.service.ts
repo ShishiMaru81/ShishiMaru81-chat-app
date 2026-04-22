@@ -4,8 +4,8 @@ import {
     type TaskLinkedToMessagePayload,
     type TaskUpdatedPayload,
 } from "@chat/types";
-import MessageModel from "@/models/Message";
-import TaskModel from "@/models/Task";
+import MessageModel from "@chat/db/models/Message";
+import TaskModel from "@chat/db/models/Task";
 import {
     buildTaskActionIdempotencyKey,
     createTaskAction,
@@ -13,9 +13,9 @@ import {
     linkMessageToTask,
     upsertTaskByDedupeKey,
     updateMessageSemanticState,
-} from "@/lib/repositories/task.repo";
-import { connectToDatabase } from "@/lib/Db/db";
-import { enqueueOutboxEvent } from "@/lib/services/outbox.service";
+} from "@chat/services/repositories/task.repo";
+import { connectToDatabase } from "@chat/db";
+import { enqueueOutboxEvent } from "@chat/services/outbox.service";
 
 const AI_VERSION = "intelligent-v3-preprocess";
 

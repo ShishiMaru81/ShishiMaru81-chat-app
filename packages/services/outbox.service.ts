@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
-import OutboxEventModel, { type IOutboxEvent, type OutboxTopic } from "@/models/OutboxEvent";
-import { connectToDatabase } from "@/lib/Db/db";
+import OutboxEventModel, { type IOutboxEvent, type OutboxTopic } from "@chat/db/models/OutboxEvent";
+import { connectToDatabase } from "@chat/db";
 
 export interface EnqueueOutboxEventInput {
     topic: OutboxTopic;

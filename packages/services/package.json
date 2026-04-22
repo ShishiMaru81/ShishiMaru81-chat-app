@@ -1,15 +1,37 @@
 {
     "name": "@chat/services",
     "version": "1.1.0",
-    "main": "./dist/services/index.js",
-    "types": "./dist/services/index.d.ts",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
     "exports": {
         ".": {
-            "import": "./dist/services/index.js",
-            "types": "./dist/services/index.d.ts"
+            "import": "./dist/index.js",
+            "types": "./dist/index.d.ts"
         },
-        "./*": "./dist/services/*.js",
-        "./repositories/*": "./dist/services/repositories/*.js"
+        "./outbox.service": {
+            "import": "./dist/outbox.service.js",
+            "types": "./dist/outbox.service.d.ts"
+        },
+        "./task-intelligence.service": {
+            "import": "./dist/task-intelligence.service.js",
+            "types": "./dist/task-intelligence.service.d.ts"
+        },
+        "./repositories/task.repo": {
+            "import": "./dist/repositories/task.repo.js",
+            "types": "./dist/repositories/task.repo.d.ts"
+        },
+        "./validators/*": {
+            "import": "./dist/validators/*.js",
+            "types": "./dist/validators/*.d.ts"
+        },
+        "./*": {
+            "import": "./dist/*.js",
+            "types": "./dist/*.d.ts"
+        },
+        "./repositories/*": {
+            "import": "./dist/repositories/*.js",
+            "types": "./dist/repositories/*.d.ts"
+        }
     },
     "scripts": {
         "build": "tsc -p tsconfig.build.json",

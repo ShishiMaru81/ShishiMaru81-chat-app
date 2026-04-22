@@ -1,11 +1,24 @@
 {
     "name": "@chat/db",
     "version": "1.2.0",
+    "main": "./dist/db.js",
+    "types": "./dist/db.d.ts",
+    "exports": {
+        ".": {
+            "import": "./dist/db.js",
+            "types": "./dist/db.d.ts"
+        },
+        "./*": {
+            "import": "./dist/*.js",
+            "types": "./dist/*.d.ts"
+        }
+    },
     "scripts": {
         "build": "tsc -p tsconfig.build.json",
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
+        "dexie": "^4.2.1",
         "mongoose": "^8.16.2",
         "mongodb": "^4.17.2"
     }

@@ -1,5 +1,5 @@
-import type { CreateTaskInput } from "@/lib/validators/task.schema";
-import { buildTaskDedupeKey, createTask, upsertTaskByDedupeKey } from "@/lib/repositories/task.repo";
+import type { CreateTaskInput } from "@chat/services/validators/task.schema";
+import { buildTaskDedupeKey, createTask, upsertTaskByDedupeKey } from "@chat/services/repositories/task.repo";
 
 export function normalizeTaskTitle(title: string) {
     return title.trim().replace(/\s+/g, " ");

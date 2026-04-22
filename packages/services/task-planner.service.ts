@@ -1,4 +1,4 @@
-import TaskModel, { ITask } from "@/models/Task";
+import TaskModel, { ITask } from "@chat/db/models/Task";
 
 export type TaskPlanResult = {
     parentTaskId: string;

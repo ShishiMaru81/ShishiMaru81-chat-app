@@ -1,11 +1,11 @@
 // src/lib/services/message.service.ts
 'use server';
-import { CreateMessageInput } from "@/lib/validators/message.schema";
+import { CreateMessageInput } from "@chat/services/validators/message.schema";
 import mongoose, { Types } from "mongoose";
-import { Conversation } from "@/models/Conversation";
-import Message, { IMessagePopulated } from "@/models/Message";
-import { connectToDatabase } from "@/lib/Db/db";
-import { enqueueOutboxEvent } from "@/lib/services/outbox.service";
+import { Conversation } from "@chat/db/models/Conversation";
+import Message, { IMessagePopulated } from "@chat/db/models/Message";
+import { connectToDatabase } from "@chat/db";
+import { enqueueOutboxEvent } from "@chat/services/outbox.service";
 //import { socket } from "@/lib/socket/socketClient";
 
 export async function createMessage(data: CreateMessageInput, senderId: string) {
