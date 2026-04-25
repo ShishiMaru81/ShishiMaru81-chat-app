@@ -1,5 +1,16 @@
 export type TaskStatus = "pending" | "executing" | "completed" | "failed" | "partial";
 
+export type TaskLifecycleState =
+    | "planning"
+    | "ready"
+    | "executing"
+    | "waiting_for_approval"
+    | "blocked"
+    | "retry_scheduled"
+    | "paused"
+    | "completed"
+    | "failed";
+
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 
 export type TaskSource = "ai" | "manual" | "imported";
@@ -89,6 +100,7 @@ export interface TaskRecord {
     title: string;
     description: string;
     status: TaskStatus;
+    lifecycleState?: TaskLifecycleState;
     priority: TaskPriority;
     assignees: string[];
     dueAt: string | null;
@@ -103,6 +115,15 @@ export interface TaskRecord {
     dependencyIds: string[];
     retryCount: number;
     maxRetries: number;
+    iterationCount?: number;
+    currentRunId?: string | null;
+    currentStepId?: string | null;
+    leaseOwner?: string | null;
+    leaseExpiresAt?: string | null;
+    lastHeartbeatAt?: string | null;
+    nextRetryAt?: string | null;
+    blockedReason?: string | null;
+    pausedReason?: string | null;
     progress: number;
     checkpoints: TaskCheckpoint[];
     executionHistory: TaskExecutionHistory;
