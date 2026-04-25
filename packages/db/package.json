@@ -8,9 +8,13 @@
             "import": "./dist/db.js",
             "types": "./dist/db.d.ts"
         },
-        "./**": {
-            "import": "./dist/**",
-            "types": "./dist/**"
+        "./*": {
+            "import": "./dist/*.js",
+            "types": "./dist/*.d.ts"
+        },
+        "./*/*": {
+            "import": "./dist/*/*",
+            "types": "./dist/*/*.d.ts"
         }
     },
     "scripts": {
