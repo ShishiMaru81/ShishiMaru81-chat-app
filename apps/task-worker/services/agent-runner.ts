@@ -2,11 +2,18 @@ import type { TaskCheckpoint, TaskExecutionActionType, TaskExecutionHistory, Tas
 import { RetryManager } from "./retry-manager.js";
 import * as taskRepo from "@chat/services/repositories/task.repo";
 import * as taskModule from "@chat/db/models/Task";
+import TaskPlanModel from "@chat/db/models/TaskPlan";
 import ToolRegistry from "./tools/tool-registry.js";
 import TaskSuccessRegistry, { createDefaultTaskSuccessRegistry } from "./task-success-registry.js";
 import { CreateIssueTool } from "./tools/create-issue.tool.js";
 import { ScheduleMeetingTool } from "./tools/schedule-meeting.tool.js";
 import { SendEmailTool } from "./tools/send-email.tool.js";
+import { createOrRefreshTaskPlan, getTaskPlan } from "./planner.js";
+import { retrieveMemory } from "./memory-service.js";
+import { generateAndStoreReflection } from "./reflection-service.js";
+import { acquireTaskLease, heartbeatTaskLease, releaseTaskLease } from "./task-lease.js";
+import { assertTransition } from "./task-state-machine.js";
+import { rankTools, type ToolRankingInput } from "./tool-ranking.js";
 
 const INTERNAL_SECRET_HEADER = "x-internal-secret";
 
@@ -27,6 +34,8 @@ type TaskDocumentLike = {
     _id: { toString(): string };
     conversationId: { toString(): string };
     parentTaskId?: { toString(): string } | null;
+    lifecycleState?: "planning" | "ready" | "executing" | "waiting_for_approval" | "blocked" | "retry_scheduled" | "paused" | "completed" | "failed";
+    sourceMessageIds?: Array<{ toString(): string }>;
     title: string;
     description: string;
     status: string;
@@ -34,6 +43,12 @@ type TaskDocumentLike = {
     dependencyIds?: Array<{ toString(): string }>;
     retryCount?: number;
     maxRetries?: number;
+    currentStepId?: string | null;
+    iterationCount?: number;
+    leaseOwner?: string | null;
+    leaseExpiresAt?: Date | null;
+    blockedReason?: string | null;
+    pausedReason?: string | null;
     progress?: number;
     checkpoints?: TaskCheckpoint[];
     executionHistory?: TaskExecutionHistory;
@@ -103,6 +118,34 @@ type RunTaskOutcome = {
     maxRetries: number;
     result: ActionExecutionResult | null;
     verification: VerificationOutcome | null;
+};
+
+type PlanStepLike = {
+    stepId: string;
+    title: string;
+    description: string;
+    kind: "tool_call" | "decision" | "approval" | "notification" | "validation";
+    state: "ready" | "running" | "waiting_for_dependency" | "waiting_for_approval" | "retry_scheduled" | "blocked" | "completed" | "failed" | "skipped";
+    order: number;
+    dependencies: string[];
+    fallback: Array<{ stepId: string; reason: string }>;
+    successCriteria: string[];
+    toolCandidates: Array<{ toolName: string; confidence: number; riskLevel: "low" | "medium" | "high" }>;
+    selectedToolName?: string | null;
+    input?: Record<string, unknown>;
+    output?: Record<string, unknown>;
+    attempts: number;
+    maxAttempts: number;
+    lastError?: string | null;
+    startedAt?: Date | string | null;
+    completedAt?: Date | string | null;
+};
+
+type TaskPlanLike = {
+    taskId: { toString(): string };
+    status: "draft" | "approved" | "active" | "completed" | "failed" | "cancelled";
+    steps: PlanStepLike[];
+    activeStepId?: string | null;
 };
 
 type LatestExecutionTaskAction = {
@@ -184,6 +227,8 @@ export class AgentRunner {
     private readonly taskSuccessRegistry: TaskSuccessRegistry;
     private readonly internalBaseUrl: string;
     private readonly getLatestExecutionTaskAction: GetLatestExecutionTaskAction;
+    private readonly persistentLoopEnabled: boolean;
+    private readonly workerId: string;
 
     constructor(options?: {
         retryManager?: RetryManager;
@@ -199,6 +244,8 @@ export class AgentRunner {
         this.taskSuccessRegistry = options?.taskSuccessRegistry ?? createDefaultTaskSuccessRegistry();
         this.internalBaseUrl = options?.internalBaseUrl ?? process.env.SOCKET_SERVER_URL ?? process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:3001";
         this.getLatestExecutionTaskAction = options?.getLatestExecutionTaskAction ?? resolveGetLatestExecutionTaskAction(taskRepo);
+        this.persistentLoopEnabled = process.env.TASK_AGENT_PERSISTENT_LOOP_ENABLED === "true";
+        this.workerId = process.env.TASK_WORKER_ID || `${process.pid}-agent-runner`;
     }
 
     private createDefaultToolRegistry() {
@@ -534,6 +581,10 @@ Reply to confirm receipt or contact support if you have questions.
     }
 
     async runTask(taskId: string): Promise<RunTaskOutcome> {
+        if (this.persistentLoopEnabled) {
+            return this.runTaskPersistent(taskId);
+        }
+
         const task = await this.taskModel.findById(taskId);
         if (!task) {
             throw new Error(`Task not found: ${taskId}`);
@@ -880,6 +931,464 @@ Reply to confirm receipt or contact support if you have questions.
         };
     }
 
+    private isTransientFailure(error?: string) {
+        if (!error) return false;
+        const lowered = error.toLowerCase();
+        return lowered.includes("timeout")
+            || lowered.includes("temporar")
+            || lowered.includes("429")
+            || lowered.includes("502")
+            || lowered.includes("503")
+            || lowered.includes("504")
+            || lowered.includes("econn")
+            || lowered.includes("network");
+    }
+
+    private async ensurePlan(task: TaskDocumentLike): Promise<TaskPlanLike> {
+        let plan = await getTaskPlan(task._id.toString()) as unknown as TaskPlanLike | null;
+        if (!plan) {
+            await this.transitionLifecycle(task, "planning");
+            await createOrRefreshTaskPlan({
+                taskId: task._id.toString(),
+                conversationId: task.conversationId.toString(),
+                title: task.title,
+                description: task.description,
+                sourceMessageIds: (task.sourceMessageIds ?? []).map((id) => id.toString()),
+                availableTools: this.toolRegistry.listForLLM().map((tool) => ({
+                    name: tool.name,
+                    description: tool.description,
+                })),
+            });
+            await this.transitionLifecycle(task, "ready");
+            plan = await getTaskPlan(task._id.toString()) as unknown as TaskPlanLike | null;
+        }
+
+        if (!plan) {
+            throw new Error(`Failed to load task plan for task: ${task._id.toString()}`);
+        }
+
+        return plan;
+    }
+
+    private async transitionLifecycle(
+        task: TaskDocumentLike,
+        nextState: "planning" | "ready" | "executing" | "waiting_for_approval" | "blocked" | "retry_scheduled" | "paused" | "completed" | "failed"
+    ) {
+        const current = task.lifecycleState ?? "ready";
+        if (current === nextState) return;
+        assertTransition(current, nextState);
+
+        task.lifecycleState = nextState;
+        if (nextState === "completed") {
+            task.status = "completed";
+        } else if (nextState === "failed") {
+            task.status = "failed";
+        } else if (nextState === "executing") {
+            task.status = "executing";
+        } else if (nextState === "waiting_for_approval" || nextState === "blocked") {
+            task.status = "partial";
+        } else if (nextState === "ready") {
+            task.status = "pending";
+        }
+
+        await this.updateTask(task, {
+            status: task.status,
+            lifecycleState: task.lifecycleState,
+        });
+    }
+
+    private async pickNextRunnableStep(plan: TaskPlanLike): Promise<PlanStepLike | null> {
+        const byId = new Map(plan.steps.map((step) => [step.stepId, step]));
+
+        const runnable = plan.steps
+            .filter((step) => step.state === "ready" || step.state === "retry_scheduled")
+            .filter((step) => step.dependencies.every((dependencyId) => byId.get(dependencyId)?.state === "completed"))
+            .sort((left, right) => left.order - right.order);
+
+        return runnable[0] ?? null;
+    }
+
+    private async updatePlanStepState(taskId: string, stepId: string, patch: Partial<PlanStepLike>) {
+        const setPatch: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(patch)) {
+            setPatch[`steps.$.${key}`] = value as unknown;
+        }
+
+        await TaskPlanModel.updateOne(
+            {
+                taskId,
+                "steps.stepId": stepId,
+            },
+            {
+                $set: {
+                    ...setPatch,
+                    activeStepId: stepId,
+                },
+            }
+        ).exec();
+    }
+
+    private rankStepTools(step: PlanStepLike, longTermMemory: Array<Record<string, unknown>>) {
+        const historyByTool = new Map<string, number[]>();
+
+        for (const item of longTermMemory) {
+            const toolName = typeof item.toolName === "string" ? item.toolName : null;
+            if (!toolName) continue;
+            const impact = typeof item.successImpact === "number" ? item.successImpact : 0;
+            const normalized = Math.max(0, Math.min(1, (impact + 1) / 2));
+            const list = historyByTool.get(toolName) ?? [];
+            list.push(normalized);
+            historyByTool.set(toolName, list);
+        }
+
+        const candidates = step.toolCandidates.length > 0
+            ? step.toolCandidates
+            : this.toolRegistry.listForLLM().map((tool) => ({
+                toolName: tool.name,
+                confidence: 0.5,
+                riskLevel: "medium" as const,
+            }));
+
+        const inputs: ToolRankingInput[] = candidates
+            .filter((candidate) => candidate.toolName !== "none")
+            .map((candidate) => {
+                const history = historyByTool.get(candidate.toolName) ?? [];
+                const historicalSuccessRate = history.length > 0
+                    ? history.reduce((sum, value) => sum + value, 0) / history.length
+                    : 0.5;
+
+                return {
+                    toolName: candidate.toolName as Exclude<TaskExecutionActionType, "none">,
+                    capabilityScore: candidate.confidence,
+                    historicalSuccessRate,
+                    riskPenalty: candidate.riskLevel === "high" ? 0.7 : candidate.riskLevel === "medium" ? 0.35 : 0.1,
+                    recentFailurePenalty: 0,
+                };
+            });
+
+        return rankTools(inputs);
+    }
+
+    private async decideStepAction(input: {
+        task: TaskDocumentLike;
+        step: PlanStepLike;
+        rankedTools: ReturnType<typeof rankTools>;
+        shortTermMemory: Array<Record<string, unknown>>;
+        longTermMemory: Array<Record<string, unknown>>;
+        iteration: number;
+    }): Promise<NextActionDecision> {
+        const ranked = input.rankedTools;
+        const fallbackTool = ranked[0]?.toolName ?? "send_email";
+
+        const apiKey = process.env.OPENAI_API_KEY;
+        if (!apiKey) {
+            return {
+                toolName: fallbackTool,
+                toolInput: this.getDefaultToolInput(fallbackTool, input.task),
+                reasoning: "No API key configured. Using ranked fallback tool.",
+            };
+        }
+
+        const baseUrl = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+        const model = process.env.TASK_AGENT_MODEL || "gpt-4o-mini";
+
+        const openAiTools = this.toolRegistry.listOpenAITools().filter((entry) =>
+            ranked.some((tool) => tool.toolName === entry.function.name)
+        );
+
+        const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+                model,
+                temperature: 0.1,
+                messages: [
+                    {
+                        role: "system" as const,
+                        content: "You are a step-driven autonomous task agent. Pick exactly one tool call for the current step. Prefer higher ranked tools unless context strongly suggests otherwise.",
+                    },
+                    {
+                        role: "user" as const,
+                        content: JSON.stringify({
+                            task: {
+                                id: input.task._id.toString(),
+                                title: input.task.title,
+                                description: input.task.description,
+                            },
+                            currentStep: input.step,
+                            rankedTools: ranked,
+                            memory: {
+                                shortTerm: input.shortTermMemory.slice(0, 5),
+                                longTerm: input.longTermMemory.slice(0, 5),
+                            },
+                            iteration: input.iteration,
+                        }),
+                    },
+                ],
+                tools: openAiTools,
+                tool_choice: "auto",
+            }),
+        });
+
+        if (!response.ok) {
+            return {
+                toolName: fallbackTool,
+                toolInput: this.getDefaultToolInput(fallbackTool, input.task),
+                reasoning: `LLM request failed (${response.status}). Using ranked fallback tool.`,
+            };
+        }
+
+        const payload = await response.json();
+        const message = payload?.choices?.[0]?.message;
+        const toolCall = Array.isArray(message?.tool_calls) ? message.tool_calls[0] : null;
+
+        if (toolCall?.function?.name) {
+            const toolName = ranked.some((tool) => tool.toolName === toolCall.function.name)
+                ? toolCall.function.name
+                : fallbackTool;
+            let toolInput: Record<string, unknown> = {};
+            if (typeof toolCall.function.arguments === "string" && toolCall.function.arguments.trim().length > 0) {
+                try {
+                    const parsed = JSON.parse(toolCall.function.arguments) as unknown;
+                    if (parsed && typeof parsed === "object") {
+                        toolInput = parsed as Record<string, unknown>;
+                    }
+                } catch {
+                    toolInput = {};
+                }
+            }
+
+            return {
+                toolName,
+                toolInput,
+                reasoning: typeof message?.content === "string" ? message.content : undefined,
+            };
+        }
+
+        return {
+            toolName: fallbackTool,
+            toolInput: this.getDefaultToolInput(fallbackTool, input.task),
+            reasoning: "No valid tool call returned; using ranked fallback tool.",
+        };
+    }
+
+    private async runTaskPersistent(taskId: string): Promise<RunTaskOutcome> {
+        const task = await this.taskModel.findById(taskId);
+        if (!task) {
+            throw new Error(`Task not found: ${taskId}`);
+        }
+
+        const lease = await acquireTaskLease(taskId, this.workerId);
+        if (!lease) {
+            return {
+                completed: false,
+                retryCount: typeof task.retryCount === "number" ? task.retryCount : 0,
+                maxRetries: typeof task.maxRetries === "number" ? task.maxRetries : 2,
+                result: null,
+                verification: null,
+            };
+        }
+
+        const maxIterations = Math.max(1, Number(process.env.TASK_AGENT_MAX_ITERATIONS || 8));
+        let iteration = typeof task.iterationCount === "number" ? task.iterationCount : 0;
+        let lastResult: ActionExecutionResult | null = null;
+        let lastVerification: VerificationOutcome | null = null;
+
+        try {
+            await this.ensurePlan(task);
+            await this.transitionLifecycle(task, "ready");
+
+            while (iteration < maxIterations) {
+                iteration += 1;
+                await heartbeatTaskLease(taskId, this.workerId);
+
+                const latestTask = await this.taskModel.findById(taskId);
+                if (!latestTask) {
+                    throw new Error(`Task disappeared during execution: ${taskId}`);
+                }
+
+                const plan = await this.ensurePlan(latestTask);
+                const step = await this.pickNextRunnableStep(plan);
+
+                if (!step) {
+                    const hasFailedStep = plan.steps.some((entry) => entry.state === "failed" || entry.state === "blocked");
+                    const hasPending = plan.steps.some((entry) => ["ready", "running", "retry_scheduled", "waiting_for_dependency"].includes(entry.state));
+
+                    if (hasFailedStep) {
+                        await this.transitionLifecycle(latestTask, "failed");
+                        break;
+                    }
+
+                    if (!hasPending) {
+                        await this.transitionLifecycle(latestTask, "completed");
+                        break;
+                    }
+
+                    await this.transitionLifecycle(latestTask, "blocked");
+                    latestTask.blockedReason = "No runnable steps due to dependency constraints.";
+                    await this.updateTask(latestTask, {
+                        status: latestTask.status,
+                        lifecycleState: latestTask.lifecycleState,
+                    });
+                    break;
+                }
+
+                await this.transitionLifecycle(latestTask, "executing");
+                await this.updateTask(latestTask, {
+                    status: latestTask.status,
+                    lifecycleState: latestTask.lifecycleState,
+                    currentStepId: step.stepId,
+                    iterationCount: iteration,
+                });
+
+                await this.updatePlanStepState(taskId, step.stepId, {
+                    state: "running",
+                    startedAt: new Date(),
+                    attempts: (step.attempts ?? 0) + 1,
+                    selectedToolName: step.selectedToolName ?? null,
+                    lastError: null,
+                });
+
+                const memory = await retrieveMemory({
+                    taskId,
+                    conversationId: latestTask.conversationId.toString(),
+                    toolName: step.selectedToolName ?? undefined,
+                    limit: 10,
+                });
+
+                const rankedTools = this.rankStepTools(step, memory.longTerm as Array<Record<string, unknown>>);
+
+                const decision = await this.decideStepAction({
+                    task: latestTask,
+                    step,
+                    rankedTools,
+                    shortTermMemory: memory.shortTerm as Array<Record<string, unknown>>,
+                    longTermMemory: memory.longTerm as Array<Record<string, unknown>>,
+                    iteration,
+                });
+
+                const executionPayload: ExecutionActionRecord = {
+                    taskId,
+                    conversationId: latestTask.conversationId.toString(),
+                    toolName: decision.toolName,
+                    parameters: decision.toolInput,
+                    messageId: null,
+                    executionState: "running",
+                };
+
+                const executed = await this.execute(executionPayload);
+                lastResult = await this.observe({
+                    task: latestTask,
+                    action: executionPayload,
+                    retryCount: typeof latestTask.retryCount === "number" ? latestTask.retryCount : 0,
+                    maxRetries: typeof latestTask.maxRetries === "number" ? latestTask.maxRetries : 2,
+                    attemptPayload: executionPayload,
+                    observed: executed,
+                    verification: null,
+                }, executed);
+
+                lastVerification = await this.verify(lastResult, {
+                    task: latestTask,
+                    action: executionPayload,
+                    retryCount: typeof latestTask.retryCount === "number" ? latestTask.retryCount : 0,
+                    maxRetries: typeof latestTask.maxRetries === "number" ? latestTask.maxRetries : 2,
+                    attemptPayload: executionPayload,
+                    observed: lastResult,
+                    verification: null,
+                });
+
+                if (lastVerification.success) {
+                    await this.updatePlanStepState(taskId, step.stepId, {
+                        state: "completed",
+                        completedAt: new Date(),
+                        selectedToolName: decision.toolName,
+                        output: {
+                            summary: lastResult.summary,
+                            evidence: lastResult.evidence,
+                            confidence: lastVerification.confidence,
+                        },
+                    });
+                    continue;
+                }
+
+                const transient = this.isTransientFailure(lastResult.error);
+                const attempted = (step.attempts ?? 0) + 1;
+
+                if (transient && attempted < (step.maxAttempts ?? 3)) {
+                    await this.updatePlanStepState(taskId, step.stepId, {
+                        state: "retry_scheduled",
+                        selectedToolName: decision.toolName,
+                        lastError: lastResult.error ?? "Transient failure",
+                    });
+
+                    await this.transitionLifecycle(latestTask, "retry_scheduled");
+                    await wait(this.getBackoffDelay(attempted));
+                    await this.transitionLifecycle(latestTask, "ready");
+                    continue;
+                }
+
+                const fallbackStepId = step.fallback[0]?.stepId;
+                if (fallbackStepId) {
+                    await this.updatePlanStepState(taskId, step.stepId, {
+                        state: "failed",
+                        selectedToolName: decision.toolName,
+                        lastError: lastResult.error ?? "Verification failed",
+                    });
+                    await this.updatePlanStepState(taskId, fallbackStepId, {
+                        state: "ready",
+                    });
+                    await this.transitionLifecycle(latestTask, "ready");
+                    continue;
+                }
+
+                await this.updatePlanStepState(taskId, step.stepId, {
+                    state: "failed",
+                    selectedToolName: decision.toolName,
+                    lastError: lastResult.error ?? "Verification failed",
+                    output: {
+                        summary: lastResult.summary,
+                        evidence: lastResult.evidence,
+                        confidence: lastVerification.confidence,
+                    },
+                });
+
+                await this.transitionLifecycle(latestTask, "failed");
+                break;
+            }
+
+            const finalTask = await this.taskModel.findById(taskId);
+            if (!finalTask) {
+                throw new Error(`Task disappeared before finalization: ${taskId}`);
+            }
+
+            const outcome = (finalTask.lifecycleState ?? "ready") === "completed";
+            await generateAndStoreReflection({
+                taskId,
+                conversationId: finalTask.conversationId.toString(),
+                runId: null,
+                title: finalTask.title,
+                outcome: outcome ? "completed" : (finalTask.lifecycleState === "failed" ? "failed" : "partial"),
+                executionSummary: lastResult?.summary ?? (outcome ? "Task completed." : "Task failed."),
+                toolName: lastResult && typeof (lastResult.evidence as Record<string, unknown>)?.toolName === "string"
+                    ? (lastResult.evidence as Record<string, unknown>).toolName as string
+                    : null,
+            });
+
+            return {
+                completed: outcome,
+                retryCount: typeof finalTask.retryCount === "number" ? finalTask.retryCount : 0,
+                maxRetries: typeof finalTask.maxRetries === "number" ? finalTask.maxRetries : 2,
+                result: lastResult,
+                verification: lastVerification,
+            };
+        } finally {
+            await releaseTaskLease(taskId, this.workerId);
+        }
+    }
+
     private async observe(_context: LoopContext, result: ActionExecutionResult): Promise<ActionExecutionResult> {
         console.log("agent-runner step:observe", {
             summary: result.summary,
@@ -1032,8 +1541,11 @@ Reply to confirm receipt or contact support if you have questions.
 
     private async updateTask(task: TaskDocumentLike, patch: {
         status?: string;
+        lifecycleState?: "planning" | "ready" | "executing" | "waiting_for_approval" | "blocked" | "retry_scheduled" | "paused" | "completed" | "failed";
         retryCount?: number;
         maxRetries?: number;
+        currentStepId?: string | null;
+        iterationCount?: number;
         progress?: number;
         checkpoints?: TaskCheckpoint[];
         executionHistory?: TaskExecutionHistory;
@@ -1046,12 +1558,24 @@ Reply to confirm receipt or contact support if you have questions.
             task.status = patch.status;
             changed = true;
         }
+        if (patch.lifecycleState !== undefined && task.lifecycleState !== patch.lifecycleState) {
+            task.lifecycleState = patch.lifecycleState;
+            changed = true;
+        }
         if (patch.retryCount !== undefined && task.retryCount !== patch.retryCount) {
             task.retryCount = patch.retryCount;
             changed = true;
         }
         if (patch.maxRetries !== undefined && task.maxRetries !== patch.maxRetries) {
             task.maxRetries = patch.maxRetries;
+            changed = true;
+        }
+        if (patch.currentStepId !== undefined && task.currentStepId !== patch.currentStepId) {
+            task.currentStepId = patch.currentStepId;
+            changed = true;
+        }
+        if (patch.iterationCount !== undefined && task.iterationCount !== patch.iterationCount) {
+            task.iterationCount = patch.iterationCount;
             changed = true;
         }
         if (patch.progress !== undefined && task.progress !== patch.progress) {
@@ -1083,8 +1607,11 @@ Reply to confirm receipt or contact support if you have questions.
             conversationId: task.conversationId.toString(),
             patch: {
                 ...(patch.status !== undefined ? { status: patch.status as any } : {}),
+                ...(patch.lifecycleState !== undefined ? { lifecycleState: patch.lifecycleState as any } : {}),
                 ...(patch.retryCount !== undefined ? { retryCount: patch.retryCount } : {}),
                 ...(patch.maxRetries !== undefined ? { maxRetries: patch.maxRetries } : {}),
+                ...(patch.currentStepId !== undefined ? { currentStepId: patch.currentStepId } : {}),
+                ...(patch.iterationCount !== undefined ? { iterationCount: patch.iterationCount } : {}),
                 ...(patch.progress !== undefined ? { progress: patch.progress } : {}),
                 ...(patch.checkpoints !== undefined ? { checkpoints: patch.checkpoints } : {}),
                 ...(patch.executionHistory !== undefined ? { executionHistory: patch.executionHistory } : {}),

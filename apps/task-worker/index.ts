@@ -48,6 +48,7 @@ const redis = redisUrl
 
 const internalBaseUrl = process.env.SOCKET_SERVER_URL || process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001";
 const INTERNAL_SECRET_HEADER = "x-internal-secret";
+const PERSISTENT_LOOP_ENABLED = process.env.TASK_AGENT_PERSISTENT_LOOP_ENABLED === "true";
 const retryManager = new RetryManager([1000, 2000, 5000]);
 const agentRunner = new AgentRunner({ retryManager, internalBaseUrl });
 
@@ -1268,7 +1269,9 @@ async function processTaskExecutionRequested(payload: NormalizedTaskExecutionReq
         conversationId: payload.conversationId,
         state: "running",
         actionType: payload.actionType,
-        summary: "Execution approved by policy. Starting autonomous runner.",
+        summary: PERSISTENT_LOOP_ENABLED
+            ? "Execution approved by policy. Starting persistent step-based runner."
+            : "Execution approved by policy. Starting autonomous runner.",
         error: null,
         updatedAt: new Date().toISOString(),
     });
