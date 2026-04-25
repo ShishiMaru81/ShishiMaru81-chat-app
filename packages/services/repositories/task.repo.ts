@@ -178,18 +178,6 @@ export async function getLatestExecutionTaskAction(taskId: string): Promise<ITas
 
     return TaskActionModel.findOne({
         taskId: toObjectId(taskId),
-        $or: [
-            {
-                toolName: {
-                    $in: ["create_github_issue", "schedule_meeting", "send_email"],
-                },
-            },
-            {
-                actionType: {
-                    $in: ["create_github_issue", "schedule_meeting", "send_email"],
-                },
-            },
-        ],
     })
         .sort({ createdAt: -1 })
         .exec();
