@@ -1,8 +1,31 @@
 {
     "name": "@chat/db",
     "version": "1.2.0",
+    "type": "module",
     "main": "./dist/db.js",
     "types": "./dist/db.d.ts",
+    "exports": {
+        ".": {
+            "import": "./dist/db.js",
+            "types": "./dist/db.d.ts"
+        },
+        "./db": {
+            "import": "./dist/db.js",
+            "types": "./dist/db.d.ts"
+        },
+        "./mongo": {
+            "import": "./dist/mongo.js",
+            "types": "./dist/mongo.d.ts"
+        },
+        "./offlineMessages": {
+            "import": "./dist/offlineMessages.js",
+            "types": "./dist/offlineMessages.d.ts"
+        },
+        "./models/*": {
+            "import": "./dist/models/*.js",
+            "types": "./dist/models/*.d.ts"
+        }
+    },
     "scripts": {
         "build": "tsc -p tsconfig.build.json",
         "typecheck": "tsc --noEmit"
