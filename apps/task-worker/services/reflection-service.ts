@@ -1,6 +1,11 @@
-import { connectToDatabase } from "@chat/db";
+import * as dbModule from "@chat/db";
 import TaskReflectionModel from "@chat/db/models/TaskReflection";
 import { writeLongTermMemory, writeShortTermMemory } from "./memory-service.js";
+
+const connectToDatabase =
+    (dbModule as unknown as { connectToDatabase?: () => Promise<unknown> }).connectToDatabase
+    || ((dbModule as unknown as { default?: { connectToDatabase?: () => Promise<unknown> } }).default?.connectToDatabase)
+    || (async () => undefined);
 
 const DEFAULT_REFLECTION_MODEL = process.env.TASK_REFLECTION_MODEL || "gpt-4o-mini";
 

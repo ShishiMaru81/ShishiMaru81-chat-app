@@ -1,6 +1,11 @@
-import { connectToDatabase } from "@chat/db";
+import * as dbModule from "@chat/db";
 import TaskPlanModel, { type ITaskStep } from "@chat/db/models/TaskPlan";
 import type { PlannerContext } from "@chat/types";
+
+const connectToDatabase =
+    (dbModule as unknown as { connectToDatabase?: () => Promise<unknown> }).connectToDatabase
+    || ((dbModule as unknown as { default?: { connectToDatabase?: () => Promise<unknown> } }).default?.connectToDatabase)
+    || (async () => undefined);
 
 const DEFAULT_PLANNER_MODEL = process.env.TASK_PLANNER_MODEL || "gpt-4o-mini";
 const DEFAULT_PLANNER_VERSION = "planner-v1";

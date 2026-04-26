@@ -148,6 +148,16 @@ type TaskPlanLike = {
     activeStepId?: string | null;
 };
 
+type RetrieveMemoryFn = typeof retrieveMemory;
+type GetTaskPlanFn = typeof getTaskPlan;
+type CreateOrRefreshTaskPlanFn = typeof createOrRefreshTaskPlan;
+type GenerateAndStoreReflectionFn = typeof generateAndStoreReflection;
+type AcquireTaskLeaseFn = typeof acquireTaskLease;
+type HeartbeatTaskLeaseFn = typeof heartbeatTaskLease;
+type ReleaseTaskLeaseFn = typeof releaseTaskLease;
+type AssertTransitionFn = typeof assertTransition;
+type UpdatePlanStepStateFn = (taskId: string, stepId: string, patch: Partial<PlanStepLike>) => Promise<void>;
+
 type LatestExecutionTaskAction = {
     taskId: { toString(): string };
     conversationId: { toString(): string };
@@ -229,6 +239,15 @@ export class AgentRunner {
     private readonly getLatestExecutionTaskAction: GetLatestExecutionTaskAction;
     private readonly persistentLoopEnabled: boolean;
     private readonly workerId: string;
+    private readonly retrieveMemoryFn: RetrieveMemoryFn;
+    private readonly getTaskPlanFn: GetTaskPlanFn;
+    private readonly createOrRefreshTaskPlanFn: CreateOrRefreshTaskPlanFn;
+    private readonly generateAndStoreReflectionFn: GenerateAndStoreReflectionFn;
+    private readonly acquireTaskLeaseFn: AcquireTaskLeaseFn;
+    private readonly heartbeatTaskLeaseFn: HeartbeatTaskLeaseFn;
+    private readonly releaseTaskLeaseFn: ReleaseTaskLeaseFn;
+    private readonly assertTransitionFn: AssertTransitionFn;
+    private readonly updatePlanStepStateFn?: UpdatePlanStepStateFn;
 
     constructor(options?: {
         retryManager?: RetryManager;
@@ -237,6 +256,17 @@ export class AgentRunner {
         taskSuccessRegistry?: TaskSuccessRegistry;
         internalBaseUrl?: string;
         getLatestExecutionTaskAction?: GetLatestExecutionTaskAction;
+        persistentLoopEnabled?: boolean;
+        workerId?: string;
+        retrieveMemoryFn?: RetrieveMemoryFn;
+        getTaskPlanFn?: GetTaskPlanFn;
+        createOrRefreshTaskPlanFn?: CreateOrRefreshTaskPlanFn;
+        generateAndStoreReflectionFn?: GenerateAndStoreReflectionFn;
+        acquireTaskLeaseFn?: AcquireTaskLeaseFn;
+        heartbeatTaskLeaseFn?: HeartbeatTaskLeaseFn;
+        releaseTaskLeaseFn?: ReleaseTaskLeaseFn;
+        assertTransitionFn?: AssertTransitionFn;
+        updatePlanStepStateFn?: UpdatePlanStepStateFn;
     }) {
         this.retryManager = options?.retryManager ?? new RetryManager([1000, 2000, 5000]);
         this.taskModel = options?.taskModel ?? resolveTaskModel(taskModule);
@@ -244,8 +274,17 @@ export class AgentRunner {
         this.taskSuccessRegistry = options?.taskSuccessRegistry ?? createDefaultTaskSuccessRegistry();
         this.internalBaseUrl = options?.internalBaseUrl ?? process.env.SOCKET_SERVER_URL ?? process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:3001";
         this.getLatestExecutionTaskAction = options?.getLatestExecutionTaskAction ?? resolveGetLatestExecutionTaskAction(taskRepo);
-        this.persistentLoopEnabled = process.env.TASK_AGENT_PERSISTENT_LOOP_ENABLED === "true";
-        this.workerId = process.env.TASK_WORKER_ID || `${process.pid}-agent-runner`;
+        this.persistentLoopEnabled = options?.persistentLoopEnabled ?? (process.env.TASK_AGENT_PERSISTENT_LOOP_ENABLED === "true");
+        this.workerId = options?.workerId ?? process.env.TASK_WORKER_ID ?? `${process.pid}-agent-runner`;
+        this.retrieveMemoryFn = options?.retrieveMemoryFn ?? retrieveMemory;
+        this.getTaskPlanFn = options?.getTaskPlanFn ?? getTaskPlan;
+        this.createOrRefreshTaskPlanFn = options?.createOrRefreshTaskPlanFn ?? createOrRefreshTaskPlan;
+        this.generateAndStoreReflectionFn = options?.generateAndStoreReflectionFn ?? generateAndStoreReflection;
+        this.acquireTaskLeaseFn = options?.acquireTaskLeaseFn ?? acquireTaskLease;
+        this.heartbeatTaskLeaseFn = options?.heartbeatTaskLeaseFn ?? heartbeatTaskLease;
+        this.releaseTaskLeaseFn = options?.releaseTaskLeaseFn ?? releaseTaskLease;
+        this.assertTransitionFn = options?.assertTransitionFn ?? assertTransition;
+        this.updatePlanStepStateFn = options?.updatePlanStepStateFn;
     }
 
     private createDefaultToolRegistry() {
@@ -945,10 +984,10 @@ Reply to confirm receipt or contact support if you have questions.
     }
 
     private async ensurePlan(task: TaskDocumentLike): Promise<TaskPlanLike> {
-        let plan = await getTaskPlan(task._id.toString()) as unknown as TaskPlanLike | null;
+        let plan = await this.getTaskPlanFn(task._id.toString()) as unknown as TaskPlanLike | null;
         if (!plan) {
             await this.transitionLifecycle(task, "planning");
-            await createOrRefreshTaskPlan({
+            await this.createOrRefreshTaskPlanFn({
                 taskId: task._id.toString(),
                 conversationId: task.conversationId.toString(),
                 title: task.title,
@@ -960,7 +999,7 @@ Reply to confirm receipt or contact support if you have questions.
                 })),
             });
             await this.transitionLifecycle(task, "ready");
-            plan = await getTaskPlan(task._id.toString()) as unknown as TaskPlanLike | null;
+            plan = await this.getTaskPlanFn(task._id.toString()) as unknown as TaskPlanLike | null;
         }
 
         if (!plan) {
@@ -976,7 +1015,7 @@ Reply to confirm receipt or contact support if you have questions.
     ) {
         const current = task.lifecycleState ?? "ready";
         if (current === nextState) return;
-        assertTransition(current, nextState);
+        this.assertTransitionFn(current, nextState);
 
         task.lifecycleState = nextState;
         if (nextState === "completed") {
@@ -1009,6 +1048,11 @@ Reply to confirm receipt or contact support if you have questions.
     }
 
     private async updatePlanStepState(taskId: string, stepId: string, patch: Partial<PlanStepLike>) {
+        if (this.updatePlanStepStateFn) {
+            await this.updatePlanStepStateFn(taskId, stepId, patch);
+            return;
+        }
+
         const setPatch: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(patch)) {
             setPatch[`steps.$.${key}`] = value as unknown;
@@ -1181,7 +1225,7 @@ Reply to confirm receipt or contact support if you have questions.
             throw new Error(`Task not found: ${taskId}`);
         }
 
-        const lease = await acquireTaskLease(taskId, this.workerId);
+        const lease = await this.acquireTaskLeaseFn(taskId, this.workerId);
         if (!lease) {
             return {
                 completed: false,
@@ -1203,7 +1247,7 @@ Reply to confirm receipt or contact support if you have questions.
 
             while (iteration < maxIterations) {
                 iteration += 1;
-                await heartbeatTaskLease(taskId, this.workerId);
+                await this.heartbeatTaskLeaseFn(taskId, this.workerId);
 
                 const latestTask = await this.taskModel.findById(taskId);
                 if (!latestTask) {
@@ -1252,7 +1296,7 @@ Reply to confirm receipt or contact support if you have questions.
                     lastError: null,
                 });
 
-                const memory = await retrieveMemory({
+                const memory = await this.retrieveMemoryFn({
                     taskId,
                     conversationId: latestTask.conversationId.toString(),
                     toolName: step.selectedToolName ?? undefined,
@@ -1365,7 +1409,7 @@ Reply to confirm receipt or contact support if you have questions.
             }
 
             const outcome = (finalTask.lifecycleState ?? "ready") === "completed";
-            await generateAndStoreReflection({
+            await this.generateAndStoreReflectionFn({
                 taskId,
                 conversationId: finalTask.conversationId.toString(),
                 runId: null,
@@ -1385,7 +1429,7 @@ Reply to confirm receipt or contact support if you have questions.
                 verification: lastVerification,
             };
         } finally {
-            await releaseTaskLease(taskId, this.workerId);
+            await this.releaseTaskLeaseFn(taskId, this.workerId);
         }
     }
 

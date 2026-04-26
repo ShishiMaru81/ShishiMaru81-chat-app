@@ -1,5 +1,10 @@
 import TaskModel from "@chat/db/models/Task";
-import { connectToDatabase } from "@chat/db";
+import * as dbModule from "@chat/db";
+
+const connectToDatabase =
+    (dbModule as unknown as { connectToDatabase?: () => Promise<unknown> }).connectToDatabase
+    || ((dbModule as unknown as { default?: { connectToDatabase?: () => Promise<unknown> } }).default?.connectToDatabase)
+    || (async () => undefined);
 
 const DEFAULT_LEASE_MS = Number(process.env.TASK_LEASE_MS || 30000);
 

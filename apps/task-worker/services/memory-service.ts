@@ -1,5 +1,10 @@
-import { connectToDatabase } from "@chat/db";
+import * as dbModule from "@chat/db";
 import TaskMemoryModel from "@chat/db/models/TaskMemory";
+
+const connectToDatabase =
+    (dbModule as unknown as { connectToDatabase?: () => Promise<unknown> }).connectToDatabase
+    || ((dbModule as unknown as { default?: { connectToDatabase?: () => Promise<unknown> } }).default?.connectToDatabase)
+    || (async () => undefined);
 
 export async function writeShortTermMemory(input: {
     taskId: string;
