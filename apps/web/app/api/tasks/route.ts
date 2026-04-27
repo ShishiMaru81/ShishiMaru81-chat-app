@@ -3,11 +3,10 @@ import { z } from "zod";
 import TaskModel from "@/models/Task";
 import { connectToDatabase } from "@/lib/Db/db";
 import { requireAuthUser } from "@/lib/utils/auth/requireAuthUser";
-import { getInternalSocketServerUrl } from "@/lib/socket/socketConfig";
-import { createInternalRequestHeaders } from "@chat/types/utils/internal-bridge-auth";
 import { createTask } from "@/lib/repositories/task.repo";
 import { normalizeTask } from "@/server/normalizers/task.normalizer";
 import { deriveTaskDedupeKey } from "@/lib/services/task.service";
+import { enqueueOutboxEvent } from "@chat/services/outbox.service";
 
 const createTaskBodySchema = z.object({
     conversationId: z.string().min(1),
@@ -88,17 +87,18 @@ export async function POST(req: NextRequest) {
 
         const normalized = normalizeTask(task);
 
-        await fetch(`${getInternalSocketServerUrl()}/internal/task-created`, {
-            method: "POST",
-            headers: createInternalRequestHeaders(),
-            body: JSON.stringify({
+        await enqueueOutboxEvent({
+            topic: "task.created",
+            dedupeKey: `task.created:${normalized._id}`,
+            payload: {
                 conversationId: normalized.conversationId,
-                payload: {
+                socketPath: "/internal/task-created",
+                socketPayload: {
                     task: normalized,
                     sourceMessageId: normalized.sourceMessageIds[0] ?? null,
                     createdByType: "user",
                 },
-            }),
+            },
         });
 
         return NextResponse.json(normalized, { status: 201 });

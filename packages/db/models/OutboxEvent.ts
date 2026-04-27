@@ -1,6 +1,11 @@
 import mongoose, { Model, Schema } from "mongoose";
 
-export type OutboxTopic = "message.created" | "task.execution.requested" | "task.execution.approved";
+export type OutboxTopic =
+    | "message.created"
+    | "task.created"
+    | "task.updated"
+    | "task.execution.requested"
+    | "task.execution.approved";
 
 export type OutboxStatus = "pending" | "processing" | "completed" | "failed";
 
@@ -24,7 +29,7 @@ const OutboxEventSchema = new Schema<IOutboxEvent>(
     {
         topic: {
             type: String,
-            enum: ["message.created", "task.execution.requested", "task.execution.approved"],
+            enum: ["message.created", "task.created", "task.updated", "task.execution.requested", "task.execution.approved"],
             required: true,
             index: true,
         },

@@ -4,9 +4,8 @@ import { connectToDatabase } from "@/lib/Db/db";
 import { requireAuthUser } from "@/lib/utils/auth/requireAuthUser";
 import { updateTask } from "@/lib/repositories/task.repo";
 import TaskModel from "@/models/Task";
-import { getInternalSocketServerUrl } from "@/lib/socket/socketConfig";
-import { createInternalRequestHeaders } from "@chat/types/utils/internal-bridge-auth";
 import { normalizeTask } from "@/server/normalizers/task.normalizer";
+import { enqueueOutboxEvent } from "@chat/services/outbox.service";
 
 const updateTaskBodySchema = z.object({
     title: z.string().min(3).max(200).optional(),
@@ -44,12 +43,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
         const normalized = normalizeTask(updated);
 
-        await fetch(`${getInternalSocketServerUrl()}/internal/task-updated`, {
-            method: "POST",
-            headers: createInternalRequestHeaders(),
-            body: JSON.stringify({
+        await enqueueOutboxEvent({
+            topic: "task.updated",
+            dedupeKey: `task.updated:${normalized._id}:${normalized.updatedAt}`,
+            payload: {
                 conversationId: normalized.conversationId,
-                payload: {
+                socketPath: "/internal/task-updated",
+                socketPayload: {
                     taskId: normalized._id,
                     conversationId: normalized.conversationId,
                     patch: body,
@@ -58,7 +58,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
                     updatedByType: "user",
                     updatedById: guard.user.id,
                 },
-            }),
+            },
         });
 
         return NextResponse.json(normalized, { status: 200 });

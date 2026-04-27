@@ -154,6 +154,12 @@ type TaskExecutionApprovedPayload = {
     reason?: string;
 };
 
+type TaskSocketBridgePayload = {
+    conversationId: string;
+    socketPath: "/internal/task-created" | "/internal/task-updated";
+    socketPayload: Record<string, unknown>;
+};
+
 type NormalizedTaskExecutionRequestedPayload = Omit<TaskExecutionRequestedPayload, "actionType"> & {
     actionType: TaskExecutionActionType;
 };
@@ -228,6 +234,15 @@ function isTaskExecutionApprovedPayload(payload: Record<string, unknown>): paylo
         typeof payload.taskId === "string"
         && typeof payload.conversationId === "string"
         && typeof payload.taskActionId === "string"
+    );
+}
+
+function isTaskSocketBridgePayload(payload: Record<string, unknown>): payload is TaskSocketBridgePayload {
+    return (
+        typeof payload.conversationId === "string"
+        && (payload.socketPath === "/internal/task-created" || payload.socketPath === "/internal/task-updated")
+        && Boolean(payload.socketPayload)
+        && typeof payload.socketPayload === "object"
     );
 }
 
@@ -1435,6 +1450,21 @@ async function processOneEvent(event: {
 
             const normalizedRequestedPayload = normalizeTaskExecutionRequestedPayload(event.payload);
             await processTaskExecutionRequested(normalizedRequestedPayload);
+
+            await complete(eventId);
+            return;
+        }
+
+        if (event.topic === "task.created" || event.topic === "task.updated") {
+            if (!isTaskSocketBridgePayload(event.payload)) {
+                throw new Error(`Invalid ${event.topic} payload shape`);
+            }
+
+            await emitInternal(
+                event.payload.socketPath,
+                event.payload.conversationId,
+                event.payload.socketPayload
+            );
 
             await complete(eventId);
             return;
