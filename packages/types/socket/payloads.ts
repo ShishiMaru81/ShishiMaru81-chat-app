@@ -1,3 +1,5 @@
+import type { MessageAiStatus, MessageSemanticType, TaskExecutionActionType, TaskLinkType, TaskPriority, TaskRecord, TaskStatus } from "../task/task";
+
 export interface JoinConversationPayload {
     conversationId: string;
 }
@@ -230,4 +232,49 @@ export interface DashboardInitPayload {
 export interface DashboardUpdatePayload {
     activeUsers?: number;
     totalMessagesToday?: number;
+}
+
+export interface TaskCreatedPayload {
+    task: TaskRecord;
+    sourceMessageId: string | null;
+    createdByType: "user" | "agent" | "system";
+}
+
+export interface TaskUpdatedPayload {
+    taskId: string;
+    conversationId: string;
+    patch: Partial<Pick<TaskRecord, "title" | "description" | "status" | "priority" | "assignees" | "dueAt" | "tags" | "latestContextMessageId" | "updatedBy" | "result" | "retryCount" | "maxRetries" | "parentTaskId" | "subTasks" | "dependencyIds" | "progress" | "checkpoints" | "executionHistory">>;
+    previousVersion: number;
+    newVersion: number;
+    updatedByType: "user" | "agent" | "system";
+    updatedById: string | null;
+}
+
+export interface TaskLinkedToMessagePayload {
+    taskId: string;
+    messageId: string;
+    conversationId: string;
+    linkType: TaskLinkType;
+    taskVersion: number;
+}
+
+export interface TaskExecutionUpdatedPayload {
+    taskId: string;
+    conversationId: string;
+    state: "queued" | "running" | "succeeded" | "failed" | "blocked" | "approval_pending";
+    actionType: TaskExecutionActionType;
+    summary: string | null;
+    error: string | null;
+    updatedAt: Date | string;
+}
+
+export interface MessageSemanticUpdatedPayload {
+    messageId: string;
+    conversationId: string;
+    semanticType: MessageSemanticType;
+    semanticConfidence: number;
+    aiStatus: MessageAiStatus;
+    aiVersion: string | null;
+    linkedTaskIds: string[];
+    semanticProcessedAt: Date | string;
 }

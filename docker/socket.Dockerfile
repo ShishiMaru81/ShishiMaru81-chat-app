@@ -6,7 +6,7 @@ COPY package.json package-lock.json turbo.json tsconfig.json ./
 COPY apps/socket ./apps/socket
 COPY packages ./packages
 
-RUN npm ci --legacy-peer-deps
+RUN npm ci --include=dev --legacy-peer-deps
 RUN npm run build --workspace=@chat/types
 RUN npm run build --workspace=@chat/socket
 
