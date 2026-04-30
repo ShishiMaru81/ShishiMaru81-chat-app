@@ -1,6 +1,6 @@
-# @chat/web
+# @chat/task-worker
 
-## 4.0.0
+## 2.0.0
 
 ### Major Changes
 
@@ -10,15 +10,5 @@
 
 - Updated dependencies [8a4de46]
   - @chat/services@2.0.0
+  - @chat/db@2.0.0
   - @chat/types@1.3.0
-
-## 3.1.0
-
-### Minor Changes
-
-- 2c48736: Add Google OAuth auth-flow reliability fixes in auth and web, including monorepo env loading support, clearer callback failure handling, and improved login fallback behavior
-
-### Patch Changes
-
-- Updated dependencies [2c48736]
-  - @chat/auth@2.3.0
