@@ -1,9 +1,10 @@
 {
   "name": "chat-app",
-  "version": "1.1.6",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "workspaces": [
+    ".",
     "apps/mobile",
     "apps/web",
     "apps/socket",
@@ -29,7 +30,7 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "echo \"Skipping npm publish for private repository\"",
-    "typecheck": "turbo run typecheck",
+    "typecheck": "turbo run typecheck --filter=./apps/* --filter=./packages/*",
     "ci:verify-artifacts": "bash ./scripts/ci/verify-artifacts.sh",
     "security:audit": "npm audit --omit=dev --audit-level=high"
   },

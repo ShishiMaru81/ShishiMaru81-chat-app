@@ -1,5 +1,11 @@
 # @chat/types
 
+## 1.3.0
+
+### Minor Changes
+
+- 8a4de46: Added task management across the stack, including shared task models/types, task APIs and socket events, a real-time task panel in the web app, and an outbox-driven worker for task intelligence and execution.
+
 ## 1.2.0
 
 ### Minor Changes
