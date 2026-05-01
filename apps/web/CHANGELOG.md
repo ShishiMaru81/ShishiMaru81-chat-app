@@ -1,5 +1,13 @@
 # @chat/web
 
+## 4.0.1
+
+### Patch Changes
+
+- 67ff3ac: Publish dedicated chat-socket image with legacy compatibility aliases and add otp stepup-up flow in stepup challenge
+- Updated dependencies [67ff3ac]
+  - @chat/auth@2.3.1
+
 ## 4.0.0
 
 ### Major Changes
