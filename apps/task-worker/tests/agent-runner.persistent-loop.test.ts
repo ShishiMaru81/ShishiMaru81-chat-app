@@ -5,6 +5,9 @@ import { AgentRunner } from "../services/agent-runner.js";
 import type { Tool } from "../services/tools/tool-registry.js";
 import ToolRegistry from "../services/tools/tool-registry.js";
 
+let currentLlmPayloads: Array<{ toolName: string; arguments: Record<string, unknown> }> | null = null;
+let currentLlmIndex = 0;
+
 type MockTask = {
     _id: { toString(): string };
     conversationId: { toString(): string };
@@ -87,6 +90,23 @@ class QueueTool implements Tool {
         }
         return next;
     }
+}
+
+function responsePayload(toolName: string, args: Record<string, unknown>, reasoning = "test decision") {
+    const text = JSON.stringify({
+        tool: toolName,
+        confidence: 0.9,
+        parameters: args,
+        reasoning,
+        noAction: false,
+        needsClarification: false,
+        clarificationQuestion: null,
+    });
+
+    return {
+        output_text: text,
+        output: [{ type: "message", content: [{ type: "output_text", text }] }],
+    };
 }
 
 function createMockTask(): MockTask {
@@ -255,6 +275,24 @@ function createRunnerHarness(options?: {
         assertTransitionFn: () => {
             // no-op for deterministic tests
         },
+        llmRequestFn: async () => {
+            const next = currentLlmPayloads?.[currentLlmIndex] ?? currentLlmPayloads?.[currentLlmPayloads.length - 1] ?? { toolName: "none", arguments: {} };
+            currentLlmIndex += 1;
+            const text = JSON.stringify({
+                tool: next.toolName === "none" ? null : next.toolName,
+                confidence: 0.9,
+                parameters: next.arguments,
+                reasoning: "test decision",
+                noAction: next.toolName === "none",
+                needsClarification: false,
+                clarificationQuestion: null,
+            });
+
+            return {
+                output_text: text,
+                output: [{ type: "message", content: [{ type: "output_text", text }] }],
+            };
+        },
         updatePlanStepStateFn: async (_taskId, stepId, patch) => {
             stepPatches.push({ stepId, patch: patch as Record<string, unknown> });
             const step = plan.steps.find((entry) => entry.stepId === stepId);
@@ -291,25 +329,19 @@ function createRunnerHarness(options?: {
 function withMockedFetch(payloads: Array<{ toolName: string; arguments: Record<string, unknown> }>, fn: () => Promise<void>) {
     const originalFetch = global.fetch;
     let index = 0;
+    const previousPayloads = currentLlmPayloads;
+    const previousIndex = currentLlmIndex;
+    currentLlmPayloads = payloads;
+    currentLlmIndex = 0;
 
     global.fetch = (async (input: URL | RequestInfo) => {
         const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
 
-        if (url.includes("/chat/completions")) {
+        if (url.includes("/responses")) {
             const next = payloads[index] ?? payloads[payloads.length - 1];
             index += 1;
             return new Response(JSON.stringify({
-                choices: [{
-                    message: {
-                        content: "",
-                        tool_calls: [{
-                            function: {
-                                name: next.toolName,
-                                arguments: JSON.stringify(next.arguments),
-                            },
-                        }],
-                    },
-                }],
+                ...responsePayload(next.toolName, next.arguments),
             }), {
                 status: 200,
                 headers: { "Content-Type": "application/json" },
@@ -331,6 +363,8 @@ function withMockedFetch(payloads: Array<{ toolName: string; arguments: Record<s
 
     return fn().finally(() => {
         global.fetch = originalFetch;
+        currentLlmPayloads = previousPayloads;
+        currentLlmIndex = previousIndex;
     });
 }
 
@@ -397,7 +431,7 @@ test("persistent loop: step-level failure triggers fallback step", async () => {
     assert.equal(fallbackNotExecuted, true);
 });
 
-test("persistent loop: immediate fallback executes despite failed dependency", async () => {
+test("persistent loop: immediate fallback remains blocked when dependency fails", async () => {
     const harness = createRunnerHarness({
         withFallbackPlan: true,
         fallbackPolicy: "immediate_execution",
@@ -421,8 +455,10 @@ test("persistent loop: immediate fallback executes despite failed dependency", a
     );
 
     const completedFallback = harness.stepPatches.some((entry) => entry.stepId === "step-2" && entry.patch.state === "completed");
-    assert.equal(completedFallback, true);
-    assert.equal(harness.createIssueTool.calls.length >= 1, true);
+    const fallbackExecuted = harness.createIssueTool.calls.length >= 1;
+
+    assert.equal(completedFallback, false);
+    assert.equal(fallbackExecuted, false);
 });
 
 test("persistent loop: writes reflection on terminal state", async () => {

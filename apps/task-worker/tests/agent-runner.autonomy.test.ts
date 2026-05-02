@@ -4,6 +4,9 @@ import { z } from "zod";
 import { AgentRunner } from "../services/agent-runner.js";
 import ToolRegistry, { type Tool } from "../services/tools/tool-registry.js";
 
+let currentLlmPayloads: Array<{ toolName: string; arguments: Record<string, unknown> }> | null = null;
+let currentLlmIndex = 0;
+
 type MockTask = {
     _id: { toString(): string };
     conversationId: { toString(): string };
@@ -79,37 +82,37 @@ function createMockTask(): MockTask {
 
 function toolCallPayload(name: string, args: Record<string, unknown>, content?: string) {
     return {
-        choices: [
-            {
-                message: {
-                    content: content ?? "",
-                    tool_calls: [
-                        {
-                            function: {
-                                name,
-                                arguments: JSON.stringify(args),
-                            },
-                        },
-                    ],
-                },
-            },
-        ],
+        toolName: name,
+        arguments: args,
     };
 }
 
 function noActionPayload(reasoning: string) {
     return {
-        choices: [
-            {
-                message: {
-                    content: JSON.stringify({
-                        noAction: true,
-                        goalAchieved: true,
-                        reasoning,
-                    }),
-                },
-            },
-        ],
+        toolName: "none",
+        arguments: { reasoning },
+    };
+}
+
+function createLlmRequestFn() {
+    return async () => {
+        const next = currentLlmPayloads?.[currentLlmIndex] ?? currentLlmPayloads?.[currentLlmPayloads.length - 1] ?? { toolName: "none", arguments: {} };
+        currentLlmIndex += 1;
+
+        const text = JSON.stringify({
+            tool: next.toolName === "none" ? null : next.toolName,
+            confidence: 0.9,
+            parameters: next.arguments,
+            reasoning: "test decision",
+            noAction: next.toolName === "none",
+            needsClarification: false,
+            clarificationQuestion: null,
+        });
+
+        return {
+            output_text: text,
+            output: [{ type: "message", content: [{ type: "output_text", text }] }],
+        };
     };
 }
 
@@ -119,11 +122,15 @@ function withMockedFetch(
 ) {
     const originalFetch = global.fetch;
     let llmIndex = 0;
+    const previousPayloads = currentLlmPayloads;
+    const previousIndex = currentLlmIndex;
+    currentLlmPayloads = llmPayloads as Array<{ toolName: string; arguments: Record<string, unknown> }>;
+    currentLlmIndex = 0;
 
     global.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
         const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
 
-        if (url.includes("/chat/completions")) {
+        if (url.includes("/responses")) {
             const payload = llmPayloads[llmIndex] ?? noActionPayload("No more actions.");
             llmIndex += 1;
             return new Response(JSON.stringify(payload), {
@@ -147,6 +154,8 @@ function withMockedFetch(
 
     return fn().finally(() => {
         global.fetch = originalFetch;
+        currentLlmPayloads = previousPayloads;
+        currentLlmIndex = previousIndex;
     });
 }
 
@@ -160,6 +169,8 @@ function restoreEnvVar(key: string, value: string | undefined) {
 }
 
 test("autonomy: schedules meeting then sends follow-up email via LLM-selected tools", async () => {
+    process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "test-key";
+
     const toolCalls: Array<{ toolName: string; input: Record<string, unknown> }> = [];
     const registry = new ToolRegistry();
     registry.register(
@@ -183,6 +194,7 @@ test("autonomy: schedules meeting then sends follow-up email via LLM-selected to
 
     const task = createMockTask();
     const runner = new AgentRunner({
+        llmRequestFn: createLlmRequestFn(),
         taskModel: {
             findById: async () => task as any,
         },
@@ -231,6 +243,8 @@ test("autonomy: schedules meeting then sends follow-up email via LLM-selected to
 });
 
 test("autonomy: creates GitHub issue then notifies team without predefined plan", async () => {
+    process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "test-key";
+
     const toolCalls: Array<{ toolName: string; input: Record<string, unknown> }> = [];
     const registry = new ToolRegistry();
     registry.register(
@@ -254,6 +268,7 @@ test("autonomy: creates GitHub issue then notifies team without predefined plan"
 
     const task = createMockTask();
     const runner = new AgentRunner({
+        llmRequestFn: createLlmRequestFn(),
         taskModel: {
             findById: async () => task as any,
         },
@@ -300,6 +315,8 @@ test("autonomy: creates GitHub issue then notifies team without predefined plan"
 });
 
 test("autonomy: chained tasks adapt after a failed step", async () => {
+    process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "test-key";
+
     const toolCalls: Array<{ toolName: string; input: Record<string, unknown> }> = [];
     const registry = new ToolRegistry();
     registry.register(
@@ -333,6 +350,7 @@ test("autonomy: chained tasks adapt after a failed step", async () => {
 
     const task = createMockTask();
     const runner = new AgentRunner({
+        llmRequestFn: createLlmRequestFn(),
         taskModel: {
             findById: async () => task as any,
         },
