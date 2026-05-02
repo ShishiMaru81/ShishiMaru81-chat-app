@@ -1,8 +1,9 @@
 import type { TaskCheckpoint, TaskExecutionActionType, TaskExecutionHistory, TaskResult, TaskUpdatedPayload, TaskValidationLog } from "@chat/types";
 import { RetryManager } from "./retry-manager.js";
+import OpenAI from "openai";
 import * as taskRepo from "@chat/services/repositories/task.repo";
 import * as taskModule from "@chat/db/models/Task";
-import TaskPlanModel from "@chat/db/models/TaskPlan";
+import TaskPlanModel from "@/lib/Db/dist/models/TaskPlan.js";
 import ToolRegistry from "./tools/tool-registry.js";
 import TaskSuccessRegistry, { createDefaultTaskSuccessRegistry } from "./task-success-registry.js";
 import { CreateIssueTool } from "./tools/create-issue.tool.js";
@@ -14,6 +15,7 @@ import { generateAndStoreReflection } from "./reflection-service.js";
 import { acquireTaskLease, heartbeatTaskLease, releaseTaskLease } from "./task-lease.js";
 import { assertTransition } from "./task-state-machine.js";
 import { rankTools, type ToolRankingInput } from "./tool-ranking.js";
+import { collectPreviousStepOutputs, llmDecisionSchema, normalizeParams, resolveStepTemplates, type PreviousStepOutputs, validateToolParameters } from "./step-execution-utils.js";
 
 const INTERNAL_SECRET_HEADER = "x-internal-secret";
 
@@ -78,7 +80,8 @@ type AvailableToolForDecision = {
 };
 
 type NextActionDecision = {
-    toolName: string;
+    toolName: string | null;
+    confidence: number;
     toolInput: Record<string, unknown>;
     reasoning?: string;
     goalAchieved?: boolean;
@@ -159,6 +162,8 @@ type HeartbeatTaskLeaseFn = typeof heartbeatTaskLease;
 type ReleaseTaskLeaseFn = typeof releaseTaskLease;
 type AssertTransitionFn = typeof assertTransition;
 type UpdatePlanStepStateFn = (taskId: string, stepId: string, patch: Partial<PlanStepLike>) => Promise<void>;
+
+type LlmRequestFn = (request: { model: string; input: string }) => Promise<{ output_text?: string; output?: unknown }>;
 
 type LatestExecutionTaskAction = {
     taskId: { toString(): string };
@@ -250,6 +255,7 @@ export class AgentRunner {
     private readonly releaseTaskLeaseFn: ReleaseTaskLeaseFn;
     private readonly assertTransitionFn: AssertTransitionFn;
     private readonly updatePlanStepStateFn?: UpdatePlanStepStateFn;
+    private readonly llmRequestFn?: LlmRequestFn;
 
     constructor(options?: {
         retryManager?: RetryManager;
@@ -269,6 +275,7 @@ export class AgentRunner {
         releaseTaskLeaseFn?: ReleaseTaskLeaseFn;
         assertTransitionFn?: AssertTransitionFn;
         updatePlanStepStateFn?: UpdatePlanStepStateFn;
+        llmRequestFn?: LlmRequestFn;
     }) {
         this.retryManager = options?.retryManager ?? new RetryManager([1000, 2000, 5000]);
         this.taskModel = options?.taskModel ?? resolveTaskModel(taskModule);
@@ -287,6 +294,7 @@ export class AgentRunner {
         this.releaseTaskLeaseFn = options?.releaseTaskLeaseFn ?? releaseTaskLease;
         this.assertTransitionFn = options?.assertTransitionFn ?? assertTransition;
         this.updatePlanStepStateFn = options?.updatePlanStepStateFn;
+        this.llmRequestFn = options?.llmRequestFn;
     }
 
     private createDefaultToolRegistry() {
@@ -315,166 +323,168 @@ export class AgentRunner {
         };
     }
 
+    private getConfidenceThreshold() {
+        const configured = Number(process.env.TASK_AGENT_CONFIDENCE_THRESHOLD ?? 0.7);
+        if (Number.isNaN(configured)) return 0.7;
+        return Math.max(0, Math.min(1, configured));
+    }
+
+    private buildPreviousStepOutputs(plan: TaskPlanLike): PreviousStepOutputs {
+        return collectPreviousStepOutputs(plan.steps);
+    }
+
+    private async requestLlmResponse(model: string, input: string): Promise<{ output_text?: string; output?: unknown }> {
+        if (this.llmRequestFn) {
+            return this.llmRequestFn({ model, input });
+        }
+
+        const apiKey = process.env.OPENAI_API_KEY;
+        if (!apiKey) {
+            throw new Error("LLM_ERROR: OPENAI_API_KEY not configured");
+        }
+
+        const openai = new OpenAI({ apiKey });
+        return openai.responses.create({ model, input }) as Promise<{ output_text?: string; output?: unknown }>;
+    }
+
+    private async pauseForClarification(task: TaskDocumentLike, clarificationQuestion: string, stepId?: string) {
+        await this.updateTask(task, {
+            status: "waiting_for_input",
+            lifecycleState: "paused",
+            pausedReason: clarificationQuestion,
+            blockedReason: stepId ? `Awaiting clarification for ${stepId}` : "Awaiting clarification",
+            result: {
+                success: false,
+                confidence: 0,
+                evidence: {
+                    needsClarification: true,
+                    clarificationQuestion,
+                    stepId: stepId ?? null,
+                },
+                error: clarificationQuestion,
+            },
+        });
+    }
+
+    async resumeTask(taskId: string, userReply: string): Promise<RunTaskOutcome> {
+        const task = await this.taskModel.findById(taskId);
+        if (!task) {
+            throw new Error(`Task not found: ${taskId}`);
+        }
+
+        await this.updateTask(task, {
+            status: "executing",
+            lifecycleState: "ready",
+            pausedReason: userReply,
+            blockedReason: null,
+        });
+
+        return this.runTask(taskId);
+    }
+
     private async decideNextAction(
         task: TaskDocumentLike,
         executionHistory: TaskExecutionHistory,
         availableTools: AvailableToolForDecision[],
         iterationContext: IterationContextEntry[]
     ): Promise<NextActionDecision> {
-        const apiKey = process.env.OPENAI_API_KEY;
-        const fallbackTool = availableTools.find((tool) => tool.name === "send_email") ?? availableTools[0];
-
-        if (!fallbackTool) {
-            return {
-                toolName: "none",
-                toolInput: {},
-                reasoning: "No available tools were registered.",
-                goalAchieved: false,
-            };
-        }
-
-        if (!apiKey) {
-            return {
-                toolName: fallbackTool.name,
-                toolInput: this.getDefaultToolInput(fallbackTool.name, task),
-                reasoning: "OPENAI_API_KEY is not configured; using fallback tool selection.",
-                goalAchieved: false,
-            };
-        }
-
-        const baseUrl = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
         const model = process.env.TASK_AGENT_MODEL || "gpt-4o-mini";
-
-        const openAiTools = this.toolRegistry.listOpenAITools();
+        const confidenceThreshold = this.getConfidenceThreshold();
 
         const systemPrompt = [
             "You are an execution-first autonomous task agent.",
-            "Decide the next best step using function/tool calling when action is needed.",
-            "If no action is needed, respond with JSON in plain text with: noAction, goalAchieved, reasoning.",
-            "If user input/state is insufficient, respond with JSON: needsClarification, clarificationQuestion, reasoning.",
-            "When calling a tool, choose exactly one tool call with valid JSON arguments.",
+            "Return a single JSON object (no surrounding text) with the shape: { tool, confidence, parameters, reasoning, noAction, needsClarification, clarificationQuestion }",
+            "When choosing a tool ensure `tool` is exactly one of the provided available tool names.",
+            "If you are unsure, set needsClarification=true and provide clarificationQuestion.",
         ].join(" ");
 
-        const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`,
+        const userPayload = {
+            task: {
+                id: task._id.toString(),
+                title: task.title,
+                description: task.description,
+                status: task.status,
+                progress: typeof task.progress === "number" ? task.progress : 0,
+                result: task.result ?? null,
             },
-            body: JSON.stringify({
-                model,
-                messages: [
-                    {
-                        role: "system" as const,
-                        content: systemPrompt,
-                    },
-                    {
-                        role: "user" as const,
-                        content: JSON.stringify({
-                            task: {
-                                id: task._id.toString(),
-                                title: task.title,
-                                description: task.description,
-                                status: task.status,
-                                progress: typeof task.progress === "number" ? task.progress : 0,
-                                result: task.result ?? null,
-                            },
-                            executionHistory,
-                            availableTools,
-                            iterationContext,
-                        }),
-                    },
-                ],
-                tools: openAiTools,
-                tool_choice: "auto",
+            executionHistory,
+            availableTools,
+            iterationContext,
+        };
+
+        const llmRequest = {
+            model,
+            input: JSON.stringify({
+                systemPrompt,
+                userPayload,
             }),
+            temperature: 0.0,
+        };
+
+        // Log sanitized request
+        console.log("agent-runner llm:request", {
+            taskId: task._id.toString(),
+            model,
+            inputSummary: JSON.stringify(userPayload).slice(0, 2000),
         });
 
-        if (!response.ok) {
-            return {
-                toolName: fallbackTool.name,
-                toolInput: this.getDefaultToolInput(fallbackTool.name, task),
-                reasoning: `LLM request failed with status ${response.status}; using fallback tool.`,
-                goalAchieved: false,
-            };
+        let res;
+        try {
+            res = await this.requestLlmResponse(model, llmRequest.input);
+        } catch (err) {
+            const detail = err instanceof Error ? err.message : String(err);
+            console.error("agent-runner llm:error", { taskId: task._id.toString(), detail });
+            throw new Error(`LLM_ERROR: ${detail}`);
         }
 
+        // Log sanitized full response (avoid dumping headers / keys)
         try {
-            const payload = await response.json();
-            const message = payload?.choices?.[0]?.message;
-            const toolCall = Array.isArray(message?.tool_calls) ? message.tool_calls[0] : null;
+            console.log("agent-runner llm:response", {
+                taskId: task._id.toString(),
+                responseText: (res.output_text ?? JSON.stringify(res.output ?? {}).slice(0, 2000)),
+            });
+        } catch { }
 
-            if (toolCall?.function?.name) {
-                const requestedTool = toolCall.function.name;
-                const selectedTool = availableTools.find((tool) => tool.name === requestedTool) ?? fallbackTool;
-                let parsedArguments: Record<string, unknown> = {};
+        const text = String(res.output_text ?? (Array.isArray(res.output) ? res.output.map((o: any) => (o.content ?? []).map((c: any) => c.text || c.url || JSON.stringify(c)).join('')).join('\n') : '')).trim();
 
-                if (typeof toolCall.function.arguments === "string" && toolCall.function.arguments.trim().length > 0) {
-                    try {
-                        const raw = JSON.parse(toolCall.function.arguments) as unknown;
-                        if (raw && typeof raw === "object") {
-                            parsedArguments = raw as Record<string, unknown>;
-                        }
-                    } catch {
-                        parsedArguments = {};
-                    }
-                }
+        if (!text) {
+            console.error("agent-runner llm:empty-response", { taskId: task._id.toString() });
+            throw new Error("LLM_ERROR: empty response from model");
+        }
 
-                return {
-                    toolName: selectedTool.name,
-                    toolInput: parsedArguments,
-                    reasoning: typeof message?.content === "string" ? message.content : undefined,
-                    goalAchieved: false,
-                };
+        // parse JSON-only response per system instructions
+        try {
+            const parsedRaw = JSON.parse(text) as unknown;
+            const parsed = llmDecisionSchema.safeParse(parsedRaw);
+            if (!parsed.success) {
+                console.error("agent-runner llm:parse-failure", { taskId: task._id.toString(), errors: parsed.error.flatten(), text: text.slice(0, 2000) });
+                throw new Error("LLM_ERROR: response parsing failed");
             }
 
-            const messageContent = typeof message?.content === "string"
-                ? message.content
-                : Array.isArray(message?.content)
-                    ? message.content.map((entry: { text?: string }) => entry?.text ?? "").join("\n")
-                    : "";
-
-            if (messageContent.trim().length > 0) {
-                try {
-                    const parsedText = JSON.parse(messageContent) as Partial<NextActionDecision>;
-                    return {
-                        toolName: fallbackTool.name,
-                        toolInput: this.getDefaultToolInput(fallbackTool.name, task),
-                        reasoning: typeof parsedText.reasoning === "string" ? parsedText.reasoning : messageContent,
-                        goalAchieved: Boolean(parsedText.goalAchieved),
-                        noAction: Boolean(parsedText.noAction),
-                        needsClarification: Boolean(parsedText.needsClarification),
-                        clarificationQuestion: typeof parsedText.clarificationQuestion === "string" ? parsedText.clarificationQuestion : undefined,
-                    };
-                } catch {
-                    const lowered = messageContent.toLowerCase();
-                    const needsClarification = lowered.includes("clarif") || lowered.includes("more information");
-                    const noAction = lowered.includes("no action");
-                    return {
-                        toolName: fallbackTool.name,
-                        toolInput: this.getDefaultToolInput(fallbackTool.name, task),
-                        reasoning: messageContent,
-                        goalAchieved: noAction,
-                        noAction,
-                        needsClarification,
-                        clarificationQuestion: needsClarification ? messageContent : undefined,
-                    };
+            const decision = parsed.data;
+            if (decision.tool !== null) {
+                const selectedTool = availableTools.find((t) => t.name === decision.tool);
+                if (!selectedTool) {
+                    throw new Error(`LLM_ERROR: requested tool not available: ${decision.tool}`);
                 }
             }
 
+            const needsClarification = Boolean(decision.needsClarification) || decision.confidence < confidenceThreshold;
             return {
-                toolName: fallbackTool.name,
-                toolInput: this.getDefaultToolInput(fallbackTool.name, task),
-                reasoning: "LLM returned no tool call or structured instruction; using fallback tool.",
-                goalAchieved: false,
+                toolName: decision.tool,
+                confidence: decision.confidence,
+                toolInput: decision.parameters,
+                reasoning: decision.reasoning ?? undefined,
+                goalAchieved: Boolean(decision.noAction),
+                noAction: Boolean(decision.noAction),
+                needsClarification,
+                clarificationQuestion: needsClarification
+                    ? (decision.clarificationQuestion ?? "Please provide more context.")
+                    : decision.clarificationQuestion ?? undefined,
             };
-        } catch {
-            return {
-                toolName: fallbackTool.name,
-                toolInput: this.getDefaultToolInput(fallbackTool.name, task),
-                reasoning: "LLM response parsing failed; using fallback tool.",
-                goalAchieved: false,
-            };
+        } catch (err) {
+            console.error("agent-runner llm:parse-failure", { taskId: task._id.toString(), err: err instanceof Error ? err.message : String(err), text: text.slice(0, 2000) });
+            throw new Error("LLM_ERROR: response parsing failed");
         }
     }
 
@@ -688,7 +698,71 @@ Reply to confirm receipt or contact support if you have questions.
             });
 
             try {
-                const decision = await this.decideNextAction(task, this.getExecutionHistory(task), availableTools, iterationContext);
+                let decision: NextActionDecision;
+                try {
+                    decision = await this.decideNextAction(task, this.getExecutionHistory(task), availableTools, iterationContext);
+                } catch (err) {
+                    const message = err instanceof Error ? err.message : String(err);
+                    if (typeof message === "string" && message.startsWith("LLM_ERROR:")) {
+                        // LLM failed — do not execute any tool. Respect retry semantics.
+                        context.retryCount += 1;
+                        console.error("agent-runner llm:fatal", { taskId, reason: message, retryCount: context.retryCount });
+
+                        if (context.retryCount <= context.maxRetries) {
+                            // schedule a retry and return control so orchestrator can requeue
+                            await this.updateTask(task, {
+                                lifecycleState: "retry_scheduled",
+                                status: "partial",
+                                retryCount: context.retryCount,
+                                maxRetries: context.maxRetries,
+                            });
+
+                            await this.appendCheckpoint(task, {
+                                step: "failed",
+                                status: "completed",
+                                progress: 100,
+                            });
+
+                            return {
+                                completed: false,
+                                retryCount: context.retryCount,
+                                maxRetries: context.maxRetries,
+                                result: context.observed,
+                                verification: context.verification,
+                            };
+                        }
+
+                        // exceeded retries -> move to dead-letter (failed)
+                        await this.updateTask(task, {
+                            status: "failed",
+                            retryCount: context.retryCount,
+                            maxRetries: context.maxRetries,
+                            progress: 100,
+                            result: {
+                                success: false,
+                                confidence: 0,
+                                evidence: { reason: message },
+                                error: message,
+                            },
+                        });
+
+                        await this.appendCheckpoint(task, {
+                            step: "failed",
+                            status: "completed",
+                            progress: 100,
+                        });
+
+                        return {
+                            completed: false,
+                            retryCount: context.retryCount,
+                            maxRetries: context.maxRetries,
+                            result: context.observed,
+                            verification: context.verification,
+                        };
+                    }
+
+                    throw err;
+                }
                 if (decision.needsClarification) {
                     await this.updateTask(task, {
                         status: "partial",
@@ -749,9 +823,11 @@ Reply to confirm receipt or contact support if you have questions.
                     };
                 }
 
+                const selectedToolName = decision.toolName ?? "none";
+
                 context.attemptPayload = {
                     ...context.attemptPayload,
-                    toolName: decision.toolName,
+                    toolName: selectedToolName,
                     parameters: decision.toolInput,
                 };
                 context.action = context.attemptPayload;
@@ -759,7 +835,7 @@ Reply to confirm receipt or contact support if you have questions.
                 if (decision.reasoning) {
                     console.log("agent-runner step:decide", {
                         taskId,
-                        toolName: decision.toolName,
+                        toolName: selectedToolName,
                         reasoning: decision.reasoning,
                     });
                 }
@@ -896,6 +972,7 @@ Reply to confirm receipt or contact support if you have questions.
             } catch (error) {
                 const reason = error instanceof Error ? error.message : "unknown execution error";
 
+                // Generic non-LLM error: record observation and increment retry count
                 await this.appendCheckpoint(task, {
                     step: "execute",
                     status: "failed",
@@ -1138,104 +1215,88 @@ Reply to confirm receipt or contact support if you have questions.
         rankedTools: ReturnType<typeof rankTools>;
         shortTermMemory: Array<Record<string, unknown>>;
         longTermMemory: Array<Record<string, unknown>>;
+        previousStepOutputs: PreviousStepOutputs;
+        clarificationReply?: string | null;
+        previousError?: string | null;
+        previousParameters?: Record<string, unknown> | null;
         iteration: number;
     }): Promise<NextActionDecision> {
         const ranked = input.rankedTools;
-        const fallbackTool = ranked[0]?.toolName ?? "send_email";
 
-        const apiKey = process.env.OPENAI_API_KEY;
-        if (!apiKey) {
-            return {
-                toolName: fallbackTool,
-                toolInput: this.getDefaultToolInput(fallbackTool, input.task),
-                reasoning: "No API key configured. Using ranked fallback tool.",
-            };
-        }
-
-        const baseUrl = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
         const model = process.env.TASK_AGENT_MODEL || "gpt-4o-mini";
+        const confidenceThreshold = this.getConfidenceThreshold();
 
-        const openAiTools = this.toolRegistry.listOpenAITools().filter((entry) =>
-            ranked.some((tool) => tool.toolName === entry.function.name)
-        );
-
-        const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`,
+        const userPayload = {
+            task: {
+                id: input.task._id.toString(),
+                title: input.task.title,
+                description: input.task.description,
             },
-            body: JSON.stringify({
-                model,
-                temperature: 0.1,
-                messages: [
-                    {
-                        role: "system" as const,
-                        content: "You are a step-driven autonomous task agent. Pick exactly one tool call for the current step. Prefer higher ranked tools unless context strongly suggests otherwise.",
-                    },
-                    {
-                        role: "user" as const,
-                        content: JSON.stringify({
-                            task: {
-                                id: input.task._id.toString(),
-                                title: input.task.title,
-                                description: input.task.description,
-                            },
-                            currentStep: input.step,
-                            rankedTools: ranked,
-                            memory: {
-                                shortTerm: input.shortTermMemory.slice(0, 5),
-                                longTerm: input.longTermMemory.slice(0, 5),
-                            },
-                            iteration: input.iteration,
-                        }),
-                    },
-                ],
-                tools: openAiTools,
-                tool_choice: "auto",
-            }),
-        });
+            currentStep: input.step,
+            rankedTools: ranked,
+            memory: {
+                shortTerm: input.shortTermMemory.slice(0, 5),
+                longTerm: input.longTermMemory.slice(0, 5),
+            },
+            previousStepOutputs: input.previousStepOutputs,
+            clarificationReply: input.clarificationReply ?? null,
+            previousError: input.previousError ?? null,
+            previousParameters: input.previousParameters ?? null,
+            iteration: input.iteration,
+        };
 
-        if (!response.ok) {
-            return {
-                toolName: fallbackTool,
-                toolInput: this.getDefaultToolInput(fallbackTool, input.task),
-                reasoning: `LLM request failed (${response.status}). Using ranked fallback tool.`,
-            };
+        const systemPrompt = "You are a step-driven autonomous task agent. Return exactly one JSON object with keys: tool, confidence, parameters, reasoning, needsClarification, clarificationQuestion";
+
+        console.log("agent-runner llm:step-request", { taskId: input.task._id.toString(), stepId: input.step.stepId, model, payloadSummary: JSON.stringify(userPayload).slice(0, 2000) });
+
+        let res;
+        try {
+            res = await this.requestLlmResponse(model, JSON.stringify({ systemPrompt, userPayload }));
+        } catch (err) {
+            console.error("agent-runner llm:step-error", { taskId: input.task._id.toString(), err: err instanceof Error ? err.message : String(err) });
+            throw new Error(`LLM_ERROR: ${err instanceof Error ? err.message : String(err)}`);
         }
 
-        const payload = await response.json();
-        const message = payload?.choices?.[0]?.message;
-        const toolCall = Array.isArray(message?.tool_calls) ? message.tool_calls[0] : null;
+        const text = String(res.output_text ?? (Array.isArray(res.output) ? res.output.map((o: any) => (o.content ?? []).map((c: any) => c.text || JSON.stringify(c)).join('')).join('\n') : '')).trim();
+        if (!text) {
+            console.error("agent-runner llm:step-empty", { taskId: input.task._id.toString(), stepId: input.step.stepId });
+            throw new Error("LLM_ERROR: empty response from model");
+        }
 
-        if (toolCall?.function?.name) {
-            const toolName = ranked.some((tool) => tool.toolName === toolCall.function.name)
-                ? toolCall.function.name
-                : fallbackTool;
-            let toolInput: Record<string, unknown> = {};
-            if (typeof toolCall.function.arguments === "string" && toolCall.function.arguments.trim().length > 0) {
-                try {
-                    const parsed = JSON.parse(toolCall.function.arguments) as unknown;
-                    if (parsed && typeof parsed === "object") {
-                        toolInput = parsed as Record<string, unknown>;
-                    }
-                } catch {
-                    toolInput = {};
+        try {
+            const parsedRaw = JSON.parse(text) as unknown;
+            const parsed = llmDecisionSchema.safeParse(parsedRaw);
+            if (!parsed.success) {
+                console.error("agent-runner llm:step-parse-failure", { taskId: input.task._id.toString(), errors: parsed.error.flatten(), text: text.slice(0, 2000) });
+                throw new Error("LLM_ERROR: response parsing failed");
+            }
+
+            const decision = parsed.data;
+            if (decision.tool !== null) {
+                const matches = ranked.some((r) => r.toolName === decision.tool);
+                if (!matches) {
+                    throw new Error(`LLM_ERROR: selected tool not in ranked list: ${decision.tool}`);
                 }
             }
 
-            return {
-                toolName,
-                toolInput,
-                reasoning: typeof message?.content === "string" ? message.content : undefined,
-            };
-        }
+            const needsClarification = Boolean(decision.needsClarification) || decision.confidence < confidenceThreshold;
 
-        return {
-            toolName: fallbackTool,
-            toolInput: this.getDefaultToolInput(fallbackTool, input.task),
-            reasoning: "No valid tool call returned; using ranked fallback tool.",
-        };
+            return {
+                toolName: decision.tool,
+                confidence: decision.confidence,
+                toolInput: decision.parameters,
+                reasoning: decision.reasoning,
+                goalAchieved: Boolean(decision.noAction),
+                noAction: Boolean(decision.noAction),
+                needsClarification,
+                clarificationQuestion: needsClarification
+                    ? (decision.clarificationQuestion ?? "Please provide more context.")
+                    : decision.clarificationQuestion ?? undefined,
+            };
+        } catch (err) {
+            console.error("agent-runner llm:step-parse-failure", { taskId: input.task._id.toString(), err: err instanceof Error ? err.message : String(err), text: text.slice(0, 2000) });
+            throw new Error("LLM_ERROR: response parsing failed");
+        }
     }
 
     private async runTaskPersistent(taskId: string): Promise<RunTaskOutcome> {
@@ -1315,6 +1376,14 @@ Reply to confirm receipt or contact support if you have questions.
                     lastError: null,
                 });
 
+                const previousStepOutputs = this.buildPreviousStepOutputs(plan);
+                const clarificationReply = typeof latestTask.pausedReason === "string" && latestTask.pausedReason.trim().length > 0
+                    ? latestTask.pausedReason
+                    : null;
+                if (clarificationReply) {
+                    await this.updateTask(latestTask, { pausedReason: null });
+                }
+
                 const memory = await this.retrieveMemoryFn({
                     taskId,
                     conversationId: latestTask.conversationId.toString(),
@@ -1324,23 +1393,137 @@ Reply to confirm receipt or contact support if you have questions.
 
                 const rankedTools = this.rankStepTools(step, memory.longTerm as Array<Record<string, unknown>>);
 
-                const decision = await this.decideStepAction({
-                    task: latestTask,
-                    step,
-                    rankedTools,
-                    shortTermMemory: memory.shortTerm as Array<Record<string, unknown>>,
-                    longTermMemory: memory.longTerm as Array<Record<string, unknown>>,
-                    iteration,
-                });
+                let decision: NextActionDecision;
+                try {
+                    decision = await this.decideStepAction({
+                        task: latestTask,
+                        step,
+                        rankedTools,
+                        shortTermMemory: memory.shortTerm as Array<Record<string, unknown>>,
+                        longTermMemory: memory.longTerm as Array<Record<string, unknown>>,
+                        previousStepOutputs,
+                        clarificationReply,
+                        previousError: step.lastError ?? null,
+                        previousParameters: (step.input ?? null) as Record<string, unknown> | null,
+                        iteration,
+                    });
+                } catch (err) {
+                    const message = err instanceof Error ? err.message : String(err);
+                    if (typeof message === "string" && message.startsWith("LLM_ERROR:")) {
+                        // Do not execute any tool. Respect retry semantics for persistent loop.
+                        const currentRetry = typeof latestTask.retryCount === "number" ? latestTask.retryCount + 1 : 1;
+                        await this.updateTask(latestTask, {
+                            lifecycleState: currentRetry <= (latestTask.maxRetries ?? 2) ? "retry_scheduled" : "failed",
+                            status: currentRetry <= (latestTask.maxRetries ?? 2) ? "partial" : "failed",
+                            retryCount: currentRetry,
+                            maxRetries: latestTask.maxRetries ?? 2,
+                        });
+
+                        await this.updatePlanStepState(taskId, step.stepId, {
+                            state: currentRetry <= (step.maxAttempts ?? 3) ? "retry_scheduled" : "failed",
+                            lastError: message,
+                        });
+
+                        console.error("agent-runner llm:step-failure", { taskId, stepId: step.stepId, message });
+
+                        if (currentRetry <= (latestTask.maxRetries ?? 2)) {
+                            // break out to allow scheduler to retry later
+                            await this.appendCheckpoint(latestTask, { step: "failed", status: "completed" });
+                            await this.releaseTaskLeaseFn(taskId, this.workerId);
+                            return {
+                                completed: false,
+                                retryCount: currentRetry,
+                                maxRetries: latestTask.maxRetries ?? 2,
+                                result: null,
+                                verification: null,
+                            };
+                        }
+
+                        // exceeded retries -> fail the task
+                        await this.appendCheckpoint(latestTask, { step: "failed", status: "completed" });
+                        await this.transitionLifecycle(latestTask, "failed");
+                        break;
+                    }
+
+                    throw err;
+                }
+
+                if (decision.needsClarification) {
+                    const clarificationQuestion = decision.clarificationQuestion ?? "Please provide more details.";
+                    await this.updatePlanStepState(taskId, step.stepId, {
+                        state: "blocked",
+                        lastError: clarificationQuestion,
+                        output: {
+                            summary: "Clarification required",
+                            data: { clarificationQuestion },
+                        },
+                    });
+
+                    await this.pauseForClarification(latestTask, clarificationQuestion, step.stepId);
+                    return {
+                        completed: false,
+                        retryCount: typeof latestTask.retryCount === "number" ? latestTask.retryCount : 0,
+                        maxRetries: typeof latestTask.maxRetries === "number" ? latestTask.maxRetries : 2,
+                        result: lastResult,
+                        verification: lastVerification,
+                    };
+                }
+
+                if (!decision.toolName || decision.toolName === "none") {
+                    await this.updatePlanStepState(taskId, step.stepId, {
+                        state: "failed",
+                        lastError: "LLM returned no executable tool.",
+                    });
+                    await this.transitionLifecycle(latestTask, "failed");
+                    break;
+                }
+
+                const selectedTool = this.toolRegistry.get(decision.toolName);
+                if (!selectedTool) {
+                    throw new Error(`No tool registered for name ${decision.toolName}`);
+                }
+
+                const resolvedInput = resolveStepTemplates(step.input ?? {}, previousStepOutputs);
+                const resolvedDecisionInput = resolveStepTemplates(decision.toolInput, previousStepOutputs);
+                const mergedInput = {
+                    ...(resolvedInput && typeof resolvedInput === "object" ? resolvedInput as Record<string, unknown> : {}),
+                    ...(resolvedDecisionInput && typeof resolvedDecisionInput === "object" ? resolvedDecisionInput as Record<string, unknown> : {}),
+                };
+                const normalizedInput = normalizeParams(decision.toolName, mergedInput);
+                const validationError = validateToolParameters(selectedTool, normalizedInput);
+                if (validationError) {
+                    await this.updatePlanStepState(taskId, step.stepId, {
+                        state: (step.attempts ?? 0) + 1 < (step.maxAttempts ?? 3) ? "retry_scheduled" : "failed",
+                        lastError: validationError,
+                    });
+
+                    if ((step.attempts ?? 0) + 1 < (step.maxAttempts ?? 3)) {
+                        await this.transitionLifecycle(latestTask, "retry_scheduled");
+                        await wait(this.getBackoffDelay((step.attempts ?? 0) + 1));
+                        await this.transitionLifecycle(latestTask, "ready");
+                        continue;
+                    }
+
+                    await this.transitionLifecycle(latestTask, "failed");
+                    break;
+                }
+
+                const selectedToolName = decision.toolName ?? "none";
 
                 const executionPayload: ExecutionActionRecord = {
                     taskId,
                     conversationId: latestTask.conversationId.toString(),
-                    toolName: decision.toolName,
-                    parameters: decision.toolInput,
+                    toolName: selectedToolName,
+                    parameters: normalizedInput,
                     messageId: null,
                     executionState: "running",
                 };
+
+                await this.updatePlanStepState(taskId, step.stepId, {
+                    selectedToolName,
+                    input: normalizedInput,
+                    lastError: null,
+                });
 
                 const executed = await this.execute(executionPayload);
                 lastResult = await this.observe({
@@ -1370,58 +1553,43 @@ Reply to confirm receipt or contact support if you have questions.
                         selectedToolName: decision.toolName,
                         output: {
                             summary: lastResult.summary,
-                            evidence: lastResult.evidence,
+                            data: lastResult.evidence,
                             confidence: lastVerification.confidence,
                         },
                     });
+
+                    if (plan.steps.every((entry) => entry.state === "completed")) {
+                        await this.transitionLifecycle(latestTask, "completed");
+                        await this.updateTask(latestTask, {
+                            status: "completed",
+                            progress: 100,
+                            result: {
+                                success: true,
+                                confidence: lastVerification.confidence,
+                                evidence: {
+                                    previousStepOutputs,
+                                    finalStepId: step.stepId,
+                                    execution: lastResult.evidence,
+                                },
+                            },
+                        });
+                        break;
+                    }
+
                     continue;
                 }
 
-                const transient = this.isTransientFailure(lastResult.error);
                 const attempted = (step.attempts ?? 0) + 1;
 
-                if (transient && attempted < (step.maxAttempts ?? 3)) {
+                if (attempted < (step.maxAttempts ?? 3)) {
                     await this.updatePlanStepState(taskId, step.stepId, {
                         state: "retry_scheduled",
                         selectedToolName: decision.toolName,
-                        lastError: lastResult.error ?? "Transient failure",
+                        lastError: lastResult.error ?? "Execution failed",
                     });
 
                     await this.transitionLifecycle(latestTask, "retry_scheduled");
                     await wait(this.getBackoffDelay(attempted));
-                    await this.transitionLifecycle(latestTask, "ready");
-                    continue;
-                }
-
-                const fallbackStepId = step.fallback[0]?.stepId;
-                if (fallbackStepId) {
-                    await this.updatePlanStepState(taskId, step.stepId, {
-                        state: "failed",
-                        selectedToolName: decision.toolName,
-                        lastError: lastResult.error ?? "Verification failed",
-                    });
-
-                    const fallbackStep = plan.steps.find((entry) => entry.stepId === fallbackStepId) ?? null;
-                    if (fallbackStep) {
-                        await this.appendCheckpoint(latestTask, {
-                            step: "adjust",
-                            status: "started",
-                        });
-
-                        await this.updatePlanStepState(taskId, fallbackStepId, {
-                            state: "ready",
-                            // Immediate fallback ignores failed dependency constraints by design.
-                            overrideDependencies: fallbackStep.fallbackPolicy === "immediate_execution"
-                                ? true
-                                : fallbackStep.overrideDependencies,
-                        });
-
-                        await this.appendCheckpoint(latestTask, {
-                            step: "adjust",
-                            status: "completed",
-                        });
-                    }
-
                     await this.transitionLifecycle(latestTask, "ready");
                     continue;
                 }
@@ -1432,7 +1600,7 @@ Reply to confirm receipt or contact support if you have questions.
                     lastError: lastResult.error ?? "Verification failed",
                     output: {
                         summary: lastResult.summary,
-                        evidence: lastResult.evidence,
+                        data: lastResult.evidence,
                         confidence: lastVerification.confidence,
                     },
                 });
@@ -1636,6 +1804,8 @@ Reply to confirm receipt or contact support if you have questions.
         checkpoints?: TaskCheckpoint[];
         executionHistory?: TaskExecutionHistory;
         result?: TaskResult;
+        pausedReason?: string | null;
+        blockedReason?: string | null;
     }) {
         const previousVersion = task.version;
         let changed = false;
@@ -1680,6 +1850,14 @@ Reply to confirm receipt or contact support if you have questions.
             task.result = patch.result;
             changed = true;
         }
+        if (patch.pausedReason !== undefined && task.pausedReason !== patch.pausedReason) {
+            task.pausedReason = patch.pausedReason;
+            changed = true;
+        }
+        if (patch.blockedReason !== undefined && task.blockedReason !== patch.blockedReason) {
+            task.blockedReason = patch.blockedReason;
+            changed = true;
+        }
 
         if (!changed) {
             return task;
@@ -1702,6 +1880,8 @@ Reply to confirm receipt or contact support if you have questions.
                 ...(patch.checkpoints !== undefined ? { checkpoints: patch.checkpoints } : {}),
                 ...(patch.executionHistory !== undefined ? { executionHistory: patch.executionHistory } : {}),
                 ...(patch.result !== undefined ? { result: patch.result } : {}),
+                ...(patch.pausedReason !== undefined ? { pausedReason: patch.pausedReason } : {}),
+                ...(patch.blockedReason !== undefined ? { blockedReason: patch.blockedReason } : {}),
                 updatedBy: null,
             },
             previousVersion,
@@ -1729,5 +1909,4 @@ Reply to confirm receipt or contact support if you have questions.
         });
     }
 }
-
 export default AgentRunner;

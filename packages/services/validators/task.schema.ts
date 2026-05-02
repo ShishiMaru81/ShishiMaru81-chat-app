@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const taskStatusSchema = z.enum(["pending", "executing", "completed", "failed", "partial"]);
+const taskStatusSchema = z.enum(["pending", "executing", "completed", "failed", "partial", "waiting_for_input"]);
 const taskLifecycleStateSchema = z.enum([
     "planning",
     "ready",

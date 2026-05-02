@@ -15,6 +15,7 @@
         "@chat/services": "^2.0.0",
         "@chat/types": "*",
         "dotenv": "^17.2.3",
+        "openai": "^4.11.0",
         "ioredis": "^5.10.0",
         "mongoose": "^8.16.2",
         "tsx": "^4.21.0",
