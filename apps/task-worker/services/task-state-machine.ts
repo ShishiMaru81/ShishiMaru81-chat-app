@@ -3,6 +3,7 @@ import type { TaskLifecycleState } from "@chat/db/models/Task";
 export type TaskStateTransitionReason =
     | "plan_created"
     | "step_started"
+    | "clarification_requested"
     | "fallback_triggered"
     | "fallback_executing"
     | "fallback_failed"

@@ -1,6 +1,6 @@
 import mongoose, { Model, Schema } from "mongoose";
 
-export type TaskStatus = "pending" | "executing" | "completed" | "failed" | "partial";
+export type TaskStatus = "pending" | "executing" | "completed" | "failed" | "partial" | "waiting_for_input";
 
 export type TaskLifecycleState =
     | "planning"
@@ -96,7 +96,7 @@ const TaskSchema = new Schema<ITask>(
         description: { type: String, trim: true, maxlength: 8000, default: "" },
         status: {
             type: String,
-            enum: ["pending", "executing", "completed", "failed", "partial"],
+            enum: ["pending", "executing", "completed", "failed", "partial", "waiting_for_input"],
             default: "pending",
             index: true,
         },

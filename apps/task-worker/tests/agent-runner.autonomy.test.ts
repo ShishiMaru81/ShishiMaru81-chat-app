@@ -4,12 +4,26 @@ import { z } from "zod";
 import { AgentRunner } from "../services/agent-runner.js";
 import ToolRegistry, { type Tool } from "../services/tools/tool-registry.js";
 
+type MockLlmPayload = {
+    toolName: string;
+    arguments: Record<string, unknown>;
+    confidence?: number;
+    reasoning?: string;
+    noAction?: boolean;
+    needsClarification?: boolean;
+    clarificationQuestion?: string | null;
+};
+
+let currentLlmPayloads: Array<MockLlmPayload> | null = null;
+let currentLlmIndex = 0;
+
 type MockTask = {
     _id: { toString(): string };
     conversationId: { toString(): string };
     title: string;
     description: string;
     status: string;
+    pausedReason?: string | null;
     version: number;
     updatedBy: null | string;
     retryCount?: number;
@@ -77,53 +91,57 @@ function createMockTask(): MockTask {
     return task;
 }
 
-function toolCallPayload(name: string, args: Record<string, unknown>, content?: string) {
+function toolCallPayload(name: string, args: Record<string, unknown>, content?: string): MockLlmPayload {
     return {
-        choices: [
-            {
-                message: {
-                    content: content ?? "",
-                    tool_calls: [
-                        {
-                            function: {
-                                name,
-                                arguments: JSON.stringify(args),
-                            },
-                        },
-                    ],
-                },
-            },
-        ],
+        toolName: name,
+        arguments: args,
     };
 }
 
-function noActionPayload(reasoning: string) {
+function noActionPayload(reasoning: string): MockLlmPayload {
     return {
-        choices: [
-            {
-                message: {
-                    content: JSON.stringify({
-                        noAction: true,
-                        goalAchieved: true,
-                        reasoning,
-                    }),
-                },
-            },
-        ],
+        toolName: "none",
+        arguments: { reasoning },
+    };
+}
+
+function createLlmRequestFn() {
+    return async () => {
+        const next = currentLlmPayloads?.[currentLlmIndex] ?? currentLlmPayloads?.[currentLlmPayloads.length - 1] ?? { toolName: "none", arguments: {} };
+        currentLlmIndex += 1;
+
+        const text = JSON.stringify({
+            tool: next.toolName === "none" ? null : next.toolName,
+            confidence: next.confidence ?? 0.9,
+            parameters: next.arguments,
+            reasoning: next.reasoning ?? "test decision",
+            noAction: next.noAction ?? next.toolName === "none",
+            needsClarification: next.needsClarification ?? false,
+            clarificationQuestion: next.clarificationQuestion ?? null,
+        });
+
+        return {
+            output_text: text,
+            output: [{ type: "message", content: [{ type: "output_text", text }] }],
+        };
     };
 }
 
 function withMockedFetch(
-    llmPayloads: Array<Record<string, unknown>>,
+    llmPayloads: Array<MockLlmPayload>,
     fn: () => Promise<void>
 ) {
     const originalFetch = global.fetch;
     let llmIndex = 0;
+    const previousPayloads = currentLlmPayloads;
+    const previousIndex = currentLlmIndex;
+    currentLlmPayloads = llmPayloads;
+    currentLlmIndex = 0;
 
     global.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
         const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
 
-        if (url.includes("/chat/completions")) {
+        if (url.includes("/responses")) {
             const payload = llmPayloads[llmIndex] ?? noActionPayload("No more actions.");
             llmIndex += 1;
             return new Response(JSON.stringify(payload), {
@@ -147,6 +165,8 @@ function withMockedFetch(
 
     return fn().finally(() => {
         global.fetch = originalFetch;
+        currentLlmPayloads = previousPayloads;
+        currentLlmIndex = previousIndex;
     });
 }
 
@@ -160,6 +180,8 @@ function restoreEnvVar(key: string, value: string | undefined) {
 }
 
 test("autonomy: schedules meeting then sends follow-up email via LLM-selected tools", async () => {
+    process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "test-key";
+
     const toolCalls: Array<{ toolName: string; input: Record<string, unknown> }> = [];
     const registry = new ToolRegistry();
     registry.register(
@@ -183,6 +205,7 @@ test("autonomy: schedules meeting then sends follow-up email via LLM-selected to
 
     const task = createMockTask();
     const runner = new AgentRunner({
+        llmRequestFn: createLlmRequestFn(),
         taskModel: {
             findById: async () => task as any,
         },
@@ -231,6 +254,8 @@ test("autonomy: schedules meeting then sends follow-up email via LLM-selected to
 });
 
 test("autonomy: creates GitHub issue then notifies team without predefined plan", async () => {
+    process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "test-key";
+
     const toolCalls: Array<{ toolName: string; input: Record<string, unknown> }> = [];
     const registry = new ToolRegistry();
     registry.register(
@@ -254,6 +279,7 @@ test("autonomy: creates GitHub issue then notifies team without predefined plan"
 
     const task = createMockTask();
     const runner = new AgentRunner({
+        llmRequestFn: createLlmRequestFn(),
         taskModel: {
             findById: async () => task as any,
         },
@@ -300,6 +326,8 @@ test("autonomy: creates GitHub issue then notifies team without predefined plan"
 });
 
 test("autonomy: chained tasks adapt after a failed step", async () => {
+    process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "test-key";
+
     const toolCalls: Array<{ toolName: string; input: Record<string, unknown> }> = [];
     const registry = new ToolRegistry();
     registry.register(
@@ -333,6 +361,7 @@ test("autonomy: chained tasks adapt after a failed step", async () => {
 
     const task = createMockTask();
     const runner = new AgentRunner({
+        llmRequestFn: createLlmRequestFn(),
         taskModel: {
             findById: async () => task as any,
         },
@@ -381,4 +410,77 @@ test("autonomy: chained tasks adapt after a failed step", async () => {
 
     restoreEnvVar("OPENAI_API_KEY", previousKey);
     restoreEnvVar("TASK_AGENT_MAX_ITERATIONS", previousMaxIterations);
+});
+
+test("autonomy: pauses for clarification and resumes with the user's reply", async () => {
+    process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "test-key";
+
+    const toolCalls: Array<{ toolName: string; input: Record<string, unknown> }> = [];
+    const registry = new ToolRegistry();
+    registry.register(
+        new RecordingTool("send_email", "Send email", toolCalls, [
+            {
+                summary: "Clarified email sent",
+                adapterSuccess: true,
+                evidence: { emailId: "clarified-1" },
+            },
+        ])
+    );
+
+    const task = createMockTask();
+    const runner = new AgentRunner({
+        llmRequestFn: createLlmRequestFn(),
+        taskModel: {
+            findById: async () => task as any,
+        },
+        toolRegistry: registry,
+        taskSuccessRegistry: {
+            validate: (toolName: string) => ({
+                validator: "autonomy-test",
+                passed: toolName === "send_email",
+                checks: [{ name: "terminal-step", passed: toolName === "send_email", details: null }],
+            }),
+        } as any,
+        internalBaseUrl: "http://mock-internal",
+        getLatestExecutionTaskAction: async () => ({
+            taskId: { toString: () => "task-1" },
+            conversationId: { toString: () => "conv-1" },
+            actionType: "none",
+            toolName: "none",
+            parameters: {},
+            messageId: null,
+            executionState: null,
+        }),
+    });
+
+    const previousKey = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = "test-key";
+
+    await withMockedFetch(
+        [
+            {
+                toolName: "none",
+                arguments: {},
+                confidence: 0.2,
+                reasoning: "Need the recipient address before proceeding.",
+                noAction: true,
+                needsClarification: true,
+                clarificationQuestion: "Who should receive the email?",
+            },
+            toolCallPayload("send_email", { to: ["team@example.com"], subject: "Clarified follow-up" }),
+        ],
+        async () => {
+            const paused = await runner.runTask("task-1");
+            assert.equal(paused.completed, false);
+            assert.equal(task.status, "waiting_for_input");
+            assert.equal(task.pausedReason, "Who should receive the email?");
+
+            const resumed = await runner.resumeTask("task-1", "team@example.com");
+            assert.equal(resumed.completed, true);
+            assert.equal(task.status, "completed");
+            assert.equal(toolCalls.length, 1);
+        }
+    );
+
+    restoreEnvVar("OPENAI_API_KEY", previousKey);
 });

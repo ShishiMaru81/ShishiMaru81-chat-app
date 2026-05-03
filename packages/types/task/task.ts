@@ -1,4 +1,4 @@
-export type TaskStatus = "pending" | "executing" | "completed" | "failed" | "partial";
+export type TaskStatus = "pending" | "executing" | "completed" | "failed" | "partial" | "waiting_for_input";
 
 export type TaskLifecycleState =
     | "planning"
