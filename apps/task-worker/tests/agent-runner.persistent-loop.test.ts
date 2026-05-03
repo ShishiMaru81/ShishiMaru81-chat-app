@@ -5,7 +5,17 @@ import { AgentRunner } from "../services/agent-runner.js";
 import type { Tool } from "../services/tools/tool-registry.js";
 import ToolRegistry from "../services/tools/tool-registry.js";
 
-let currentLlmPayloads: Array<{ toolName: string; arguments: Record<string, unknown> }> | null = null;
+type MockLlmPayload = {
+    toolName: string;
+    arguments: Record<string, unknown>;
+    confidence?: number;
+    reasoning?: string;
+    noAction?: boolean;
+    needsClarification?: boolean;
+    clarificationQuestion?: string | null;
+};
+
+let currentLlmPayloads: Array<MockLlmPayload> | null = null;
 let currentLlmIndex = 0;
 
 type MockTask = {
@@ -106,6 +116,28 @@ function responsePayload(toolName: string, args: Record<string, unknown>, reason
     return {
         output_text: text,
         output: [{ type: "message", content: [{ type: "output_text", text }] }],
+    };
+}
+
+function createLlmRequestFn() {
+    return async () => {
+        const next = currentLlmPayloads?.[currentLlmIndex] ?? currentLlmPayloads?.[currentLlmPayloads.length - 1] ?? { toolName: "none", arguments: {} };
+        currentLlmIndex += 1;
+
+        const text = JSON.stringify({
+            tool: next.toolName === "none" ? null : next.toolName,
+            confidence: next.confidence ?? 0.9,
+            parameters: next.arguments,
+            reasoning: next.reasoning ?? "test decision",
+            noAction: next.noAction ?? next.toolName === "none",
+            needsClarification: next.needsClarification ?? false,
+            clarificationQuestion: next.clarificationQuestion ?? null,
+        });
+
+        return {
+            output_text: text,
+            output: [{ type: "message", content: [{ type: "output_text", text }] }],
+        };
     };
 }
 
@@ -275,24 +307,7 @@ function createRunnerHarness(options?: {
         assertTransitionFn: () => {
             // no-op for deterministic tests
         },
-        llmRequestFn: async () => {
-            const next = currentLlmPayloads?.[currentLlmIndex] ?? currentLlmPayloads?.[currentLlmPayloads.length - 1] ?? { toolName: "none", arguments: {} };
-            currentLlmIndex += 1;
-            const text = JSON.stringify({
-                tool: next.toolName === "none" ? null : next.toolName,
-                confidence: 0.9,
-                parameters: next.arguments,
-                reasoning: "test decision",
-                noAction: next.toolName === "none",
-                needsClarification: false,
-                clarificationQuestion: null,
-            });
-
-            return {
-                output_text: text,
-                output: [{ type: "message", content: [{ type: "output_text", text }] }],
-            };
-        },
+        llmRequestFn: createLlmRequestFn(),
         updatePlanStepStateFn: async (_taskId, stepId, patch) => {
             stepPatches.push({ stepId, patch: patch as Record<string, unknown> });
             const step = plan.steps.find((entry) => entry.stepId === stepId);
@@ -326,7 +341,7 @@ function createRunnerHarness(options?: {
     };
 }
 
-function withMockedFetch(payloads: Array<{ toolName: string; arguments: Record<string, unknown> }>, fn: () => Promise<void>) {
+function withMockedFetch(payloads: Array<MockLlmPayload>, fn: () => Promise<void>) {
     const originalFetch = global.fetch;
     let index = 0;
     const previousPayloads = currentLlmPayloads;
@@ -472,4 +487,27 @@ test("persistent loop: writes reflection on terminal state", async () => {
     );
 
     assert.equal(harness.stats.reflectionCalls, 1);
+});
+
+test("persistent loop: self-heals a failed tool execution before retry scheduling", async () => {
+    const harness = createRunnerHarness({
+        sendEmailOutputs: [
+            { summary: "smtp failed", adapterSuccess: false, evidence: { responseStatus: 500 }, error: "smtp unavailable" },
+            { summary: "smtp recovered", adapterSuccess: true, evidence: { responseStatus: 200, responseBody: { id: "msg-2" } } },
+        ],
+    });
+
+    await withMockedFetch(
+        [
+            { toolName: "send_email", arguments: { to: ["team@example.com"], subject: "First attempt" } },
+            { toolName: "send_email", arguments: { to: ["team@example.com"], subject: "Corrected attempt" } },
+        ],
+        async () => {
+            const result = await harness.runner.runTask("task-1");
+            assert.equal(result.completed, true);
+        }
+    );
+
+    assert.equal(harness.sendEmailTool.calls.length, 2);
+    assert.equal(harness.sendEmailTool.calls[1]?.input.subject, "Corrected attempt");
 });
