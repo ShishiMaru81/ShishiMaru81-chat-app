@@ -765,7 +765,10 @@ Reply to confirm receipt or contact support if you have questions.
                 }
                 if (decision.needsClarification) {
                     await this.updateTask(task, {
-                        status: "partial",
+                        status: "waiting_for_input",
+                        lifecycleState: "paused",
+                        pausedReason: decision.clarificationQuestion ?? decision.reasoning ?? "Clarification required.",
+                        blockedReason: decision.clarificationQuestion ?? "Awaiting clarification.",
                         progress: 100,
                         result: {
                             success: false,
@@ -1509,23 +1512,104 @@ Reply to confirm receipt or contact support if you have questions.
                 }
 
                 const selectedToolName = decision.toolName ?? "none";
+                let activeDecision = decision;
+                let activeToolName = selectedToolName;
+                let activeNormalizedInput = normalizedInput;
 
-                const executionPayload: ExecutionActionRecord = {
+                let executionPayload: ExecutionActionRecord = {
                     taskId,
                     conversationId: latestTask.conversationId.toString(),
-                    toolName: selectedToolName,
-                    parameters: normalizedInput,
+                    toolName: activeToolName,
+                    parameters: activeNormalizedInput,
                     messageId: null,
                     executionState: "running",
                 };
 
                 await this.updatePlanStepState(taskId, step.stepId, {
-                    selectedToolName,
-                    input: normalizedInput,
+                    selectedToolName: activeToolName,
+                    input: activeNormalizedInput,
                     lastError: null,
                 });
 
-                const executed = await this.execute(executionPayload);
+                let executed = await this.execute(executionPayload);
+
+                if ((!executed.adapterSuccess || executed.error) && (step.attempts ?? 0) < (step.maxAttempts ?? 3)) {
+                    try {
+                        const correctedDecision = await this.decideStepAction({
+                            task: latestTask,
+                            step,
+                            rankedTools,
+                            shortTermMemory: memory.shortTerm as Array<Record<string, unknown>>,
+                            longTermMemory: memory.longTerm as Array<Record<string, unknown>>,
+                            previousStepOutputs,
+                            clarificationReply,
+                            previousError: executed.error ?? "Execution failed",
+                            previousParameters: activeNormalizedInput,
+                            iteration: iteration + 1,
+                        });
+
+                        if (correctedDecision.needsClarification) {
+                            const clarificationQuestion = correctedDecision.clarificationQuestion ?? "Please provide more details.";
+                            await this.updatePlanStepState(taskId, step.stepId, {
+                                state: "blocked",
+                                lastError: clarificationQuestion,
+                                output: {
+                                    summary: "Clarification required",
+                                    data: { clarificationQuestion },
+                                },
+                            });
+
+                            await this.pauseForClarification(latestTask, clarificationQuestion, step.stepId);
+                            return {
+                                completed: false,
+                                retryCount: typeof latestTask.retryCount === "number" ? latestTask.retryCount : 0,
+                                maxRetries: typeof latestTask.maxRetries === "number" ? latestTask.maxRetries : 2,
+                                result: lastResult,
+                                verification: lastVerification,
+                            };
+                        }
+
+                        if (correctedDecision.toolName && correctedDecision.toolName !== "none") {
+                            const correctedTool = this.toolRegistry.get(correctedDecision.toolName);
+                            if (correctedTool) {
+                                const correctedResolvedInput = resolveStepTemplates(step.input ?? {}, previousStepOutputs);
+                                const correctedResolvedDecisionInput = resolveStepTemplates(correctedDecision.toolInput, previousStepOutputs);
+                                const correctedMergedInput = {
+                                    ...(correctedResolvedInput && typeof correctedResolvedInput === "object" ? correctedResolvedInput as Record<string, unknown> : {}),
+                                    ...(correctedResolvedDecisionInput && typeof correctedResolvedDecisionInput === "object" ? correctedResolvedDecisionInput as Record<string, unknown> : {}),
+                                };
+                                const correctedNormalizedInput = normalizeParams(correctedDecision.toolName, correctedMergedInput);
+                                const correctedValidationError = validateToolParameters(correctedTool, correctedNormalizedInput);
+
+                                if (!correctedValidationError) {
+                                    activeDecision = correctedDecision;
+                                    activeToolName = correctedDecision.toolName;
+                                    activeNormalizedInput = correctedNormalizedInput;
+                                    executionPayload = {
+                                        ...executionPayload,
+                                        toolName: activeToolName,
+                                        parameters: activeNormalizedInput,
+                                    };
+
+                                    await this.updatePlanStepState(taskId, step.stepId, {
+                                        selectedToolName: activeToolName,
+                                        input: activeNormalizedInput,
+                                        lastError: null,
+                                    });
+
+                                    executed = await this.execute(executionPayload);
+                                }
+                            }
+                        }
+                    } catch (retryErr) {
+                        console.error("agent-runner llm:self-heal-failed", {
+                            taskId,
+                            stepId: step.stepId,
+                            message: retryErr instanceof Error ? retryErr.message : String(retryErr),
+                        });
+                    }
+                }
+
                 lastResult = await this.observe({
                     task: latestTask,
                     action: executionPayload,
@@ -1550,7 +1634,7 @@ Reply to confirm receipt or contact support if you have questions.
                     await this.updatePlanStepState(taskId, step.stepId, {
                         state: "completed",
                         completedAt: new Date(),
-                        selectedToolName: decision.toolName,
+                        selectedToolName: activeDecision.toolName,
                         output: {
                             summary: lastResult.summary,
                             data: lastResult.evidence,
@@ -1584,7 +1668,7 @@ Reply to confirm receipt or contact support if you have questions.
                 if (attempted < (step.maxAttempts ?? 3)) {
                     await this.updatePlanStepState(taskId, step.stepId, {
                         state: "retry_scheduled",
-                        selectedToolName: decision.toolName,
+                        selectedToolName: activeToolName,
                         lastError: lastResult.error ?? "Execution failed",
                     });
 
@@ -1596,7 +1680,7 @@ Reply to confirm receipt or contact support if you have questions.
 
                 await this.updatePlanStepState(taskId, step.stepId, {
                     state: "failed",
-                    selectedToolName: decision.toolName,
+                    selectedToolName: activeToolName,
                     lastError: lastResult.error ?? "Verification failed",
                     output: {
                         summary: lastResult.summary,

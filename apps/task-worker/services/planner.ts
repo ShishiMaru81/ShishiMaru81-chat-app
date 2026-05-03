@@ -167,6 +167,14 @@ function parsePlannedSteps(payload: unknown): ITaskStep[] {
             ? raw.successCriteria.filter((entry): entry is string => typeof entry === "string" && entry.length > 0)
             : [];
 
+        const input = raw.input && typeof raw.input === "object" && !Array.isArray(raw.input)
+            ? (raw.input as Record<string, unknown>)
+            : {};
+
+        const output = raw.output && typeof raw.output === "object" && !Array.isArray(raw.output)
+            ? (raw.output as Record<string, unknown>)
+            : {};
+
         parsed.push({
             stepId,
             title,
@@ -182,8 +190,8 @@ function parsePlannedSteps(payload: unknown): ITaskStep[] {
             successCriteria,
             toolCandidates,
             selectedToolName: null,
-            input: {},
-            output: {},
+            input,
+            output,
             state: "ready",
             attempts: 0,
             maxAttempts: typeof raw.maxAttempts === "number" && raw.maxAttempts > 0 ? Math.floor(raw.maxAttempts) : 3,
@@ -204,7 +212,8 @@ async function requestPlanFromLlm(context: PlannerContext): Promise<{ goal: stri
 
     const prompt = [
         "Return strict JSON object with keys: goal, successDefinition, steps.",
-        "Each step must include: stepId, title, description, kind, dependencies, fallback, successCriteria, toolCandidates, maxAttempts.",
+        "Each step must include: stepId, title, description, kind, dependencies, fallback, successCriteria, toolCandidates, input, output, maxAttempts.",
+        "Use input/output to preserve template-ready execution context between steps.",
         "Use toolCandidates only from availableTools.",
         "Plan must be dependency-aware and executable incrementally.",
     ].join(" ");
