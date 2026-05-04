@@ -1262,17 +1262,20 @@ Reply to confirm receipt or contact support if you have questions.
         let plan = await this.getTaskPlanFn(task._id.toString()) as unknown as TaskPlanLike | null;
         if (!plan) {
             await this.transitionLifecycle(task, "planning");
-            await this.createOrRefreshTaskPlanFn({
-                taskId: task._id.toString(),
-                conversationId: task.conversationId.toString(),
-                title: task.title,
-                description: task.description,
-                sourceMessageIds: (task.sourceMessageIds ?? []).map((id) => id.toString()),
-                availableTools: this.toolRegistry.listForLLM().map((tool) => ({
-                    name: tool.name,
-                    description: tool.description,
-                })),
-            });
+            await this.createOrRefreshTaskPlanFn(
+                {
+                    taskId: task._id.toString(),
+                    conversationId: task.conversationId.toString(),
+                    title: task.title,
+                    description: task.description,
+                    sourceMessageIds: (task.sourceMessageIds ?? []).map((id) => id.toString()),
+                    availableTools: this.toolRegistry.listForLLM().map((tool) => ({
+                        name: tool.name,
+                        description: tool.description,
+                    })),
+                },
+                { llmRequestFn: this.llmRequestFn }
+            );
             await this.transitionLifecycle(task, "ready");
             plan = await this.getTaskPlanFn(task._id.toString()) as unknown as TaskPlanLike | null;
         }

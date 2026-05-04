@@ -45,7 +45,7 @@ const OUTBOX_RETRY_JITTER_PCT = Number(process.env.OUTBOX_RETRY_JITTER_PCT || 0.
 
 const redisUrl = process.env.REDIS_URL || process.env.UPSTASH_REDIS_REST_URL;
 const redis = redisUrl
-    ? new Redis(redisUrl, { lazyConnect: true, maxRetriesPerRequest: null })
+    ? new (Redis as unknown as any)(redisUrl, { lazyConnect: true, maxRetriesPerRequest: null })
     : null;
 
 const internalBaseUrl = process.env.SOCKET_SERVER_URL || process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001";
